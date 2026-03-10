@@ -32,6 +32,7 @@ const fallbackItems: DockItem[] = [
 function mapDockItem(input: {
   identity: { bundle_id: string | null; path: string };
   display_name: string;
+  icon_src: string;
   is_active: boolean;
   is_pinned: boolean;
   is_running: boolean;
@@ -39,7 +40,7 @@ function mapDockItem(input: {
   return {
     bundleId: input.identity.bundle_id,
     displayName: input.display_name,
-    iconSrc: "",
+    iconSrc: input.icon_src,
     isActive: input.is_active,
     isPinned: input.is_pinned,
     isRunning: input.is_running,
@@ -56,6 +57,7 @@ export async function fetchDockState(): Promise<DockItem[]> {
     Array<{
       identity: { bundle_id: string | null; path: string };
       display_name: string;
+      icon_src: string;
       is_active: boolean;
       is_pinned: boolean;
       is_running: boolean;

@@ -19,6 +19,7 @@ pub struct RunningApp {
 pub struct DockItemView {
     pub identity: AppIdentity,
     pub display_name: String,
+    pub icon_src: String,
     pub is_pinned: bool,
     pub is_running: bool,
     pub is_active: bool,

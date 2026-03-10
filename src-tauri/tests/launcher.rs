@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use dors_tauri_lib::services::launcher::{
-    LaunchAction, LaunchRequest, LaunchResult, launch_or_activate,
+    LaunchAction, LaunchRequest, LaunchResult, activation_script, launch_or_activate,
 };
 
 #[test]
@@ -55,4 +55,22 @@ fn launcher_uses_fallback_launch_when_activation_fails() {
     );
 
     assert_eq!(result, LaunchAction::LaunchFallback);
+}
+
+#[test]
+fn finder_activation_script_reopens_a_window() {
+    let request = LaunchRequest {
+        bundle_id: Some("com.apple.finder".to_string()),
+        path: PathBuf::from("/System/Library/CoreServices/Finder.app"),
+        is_running: true,
+    };
+
+    assert_eq!(
+        activation_script(&request),
+        Some(
+            "tell application \"Finder\" to activate\n\
+tell application \"Finder\" to reopen"
+                .to_string()
+        )
+    );
 }

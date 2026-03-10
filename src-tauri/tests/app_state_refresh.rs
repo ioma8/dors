@@ -11,6 +11,7 @@ fn dock_item(name: &str, path: &str) -> DockItemView {
             path: PathBuf::from(path),
         },
         display_name: name.to_string(),
+        icon_src: String::new(),
         is_pinned: true,
         is_running: true,
         is_active: false,

@@ -7,7 +7,7 @@ const dockItems: DockItem[] = [
   {
     bundleId: "com.apple.Safari",
     displayName: "Safari",
-    iconSrc: "",
+    iconSrc: "data:image/png;base64,c2FmYXJp",
     isActive: false,
     isPinned: true,
     isRunning: true,
@@ -66,6 +66,24 @@ describe("dock", () => {
     root.querySelector<HTMLButtonElement>("[data-dock-item='0']")?.click();
 
     expect(onActivate).toHaveBeenCalledWith(dockItems[0]);
+  });
+
+  it("renders a real icon image when icon source is available", () => {
+    const root = document.querySelector<HTMLDivElement>("#root");
+
+    if (!root) {
+      throw new Error("root not found");
+    }
+
+    renderDock(root, {
+      items: dockItems,
+      onActivate: vi.fn(),
+    });
+
+    const icon = root.querySelector<HTMLImageElement>(".dock-icon-image");
+
+    expect(icon).not.toBeNull();
+    expect(icon?.src).toContain("data:image/png;base64,c2FmYXJp");
   });
 
   it("renders an empty state when no pinned items import successfully", () => {

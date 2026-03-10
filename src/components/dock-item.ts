@@ -19,7 +19,15 @@ export function createDockItem({ index, item, onActivate }: DockItemOptions): HT
 
   const icon = document.createElement("span");
   icon.className = "dock-icon";
-  icon.textContent = item.displayName.slice(0, 1).toUpperCase();
+  if (item.iconSrc) {
+    const image = document.createElement("img");
+    image.className = "dock-icon-image";
+    image.src = item.iconSrc;
+    image.alt = "";
+    icon.append(image);
+  } else {
+    icon.textContent = item.displayName.slice(0, 1).toUpperCase();
+  }
   button.append(icon);
 
   const label = document.createElement("span");

@@ -14,7 +14,15 @@ use config::{ConfigLoad, ConfigStore, DockConfig};
 #[tauri::command]
 fn get_dock_state(state: State<'_, AppState>) -> Result<Vec<domain::DockItemView>, String> {
     let running_apps = adapters::running_apps::read_running_apps()?;
-    state.refresh_with_running_apps(running_apps)
+    let dock_items = state.refresh_with_running_apps(running_apps)?;
+    Ok(dock_items
+        .into_iter()
+        .map(|mut item| {
+            item.icon_src =
+                adapters::icon_loader::load_icon_data_url(&item.identity.path).unwrap_or_default();
+            item
+        })
+        .collect())
 }
 
 #[tauri::command]

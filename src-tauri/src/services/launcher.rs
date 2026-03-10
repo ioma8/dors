@@ -57,11 +57,10 @@ where
 }
 
 pub fn activate_app(request: &LaunchRequest) -> LaunchResult {
-    let Some(bundle_id) = &request.bundle_id else {
+    let Some(script) = activation_script(request) else {
         return LaunchResult::ActivationFailed;
     };
 
-    let script = format!("tell application id \"{bundle_id}\" to activate");
     match Command::new("osascript").args(["-e", &script]).status() {
         Ok(status) if status.success() => LaunchResult::Activated,
         Ok(_) | Err(_) => LaunchResult::ActivationFailed,
@@ -73,4 +72,18 @@ pub fn launch_app(request: &LaunchRequest) -> LaunchResult {
         Ok(status) if status.success() => LaunchResult::Launched,
         Ok(_) | Err(_) => LaunchResult::LaunchFailed,
     }
+}
+
+pub fn activation_script(request: &LaunchRequest) -> Option<String> {
+    let bundle_id = request.bundle_id.as_deref()?;
+
+    if bundle_id == "com.apple.finder" {
+        return Some(
+            "tell application \"Finder\" to activate\n\
+tell application \"Finder\" to reopen"
+                .to_string(),
+        );
+    }
+
+    Some(format!("tell application id \"{bundle_id}\" to activate"))
 }

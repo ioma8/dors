@@ -14,6 +14,7 @@ pub fn build_dock_items(config: &DockConfig, running_apps: &[RunningApp]) -> Vec
         items.push(DockItemView {
             identity: pinned.identity.clone(),
             display_name: pinned.display_name.clone(),
+            icon_src: String::new(),
             is_pinned: true,
             is_running: running_match.is_some(),
             is_active: running_match.is_some_and(|app| app.is_active),
@@ -33,6 +34,7 @@ pub fn build_dock_items(config: &DockConfig, running_apps: &[RunningApp]) -> Vec
         items.push(DockItemView {
             identity: running.identity.clone(),
             display_name: running.display_name.clone(),
+            icon_src: String::new(),
             is_pinned: false,
             is_running: true,
             is_active: running.is_active,
