@@ -4,7 +4,8 @@ use thiserror::Error;
 
 use crate::adapters::dock_import::{DockImportError, DockImportResult};
 use crate::config::{ConfigLoad, ConfigStoreError, DockConfig};
-use crate::domain::DockItemView;
+use crate::domain::{DockItemView, RunningApp};
+use crate::services::dock_state::build_dock_items;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BootstrapResult {
@@ -15,6 +16,7 @@ pub struct BootstrapResult {
 #[derive(Debug, Default)]
 pub struct AppState {
     dock_items: Mutex<Vec<DockItemView>>,
+    pinned_config: DockConfig,
 }
 
 #[derive(Debug, Error)]
@@ -54,9 +56,10 @@ where
 }
 
 impl AppState {
-    pub fn new(dock_items: Vec<DockItemView>) -> Self {
+    pub fn new(pinned_config: DockConfig) -> Self {
         Self {
-            dock_items: Mutex::new(dock_items),
+            dock_items: Mutex::new(Vec::new()),
+            pinned_config,
         }
     }
 
@@ -74,5 +77,14 @@ impl AppState {
                 *items = dock_items;
             })
             .map_err(|_| "dock state lock poisoned".to_string())
+    }
+
+    pub fn refresh_with_running_apps(
+        &self,
+        running_apps: Vec<RunningApp>,
+    ) -> Result<Vec<DockItemView>, String> {
+        let dock_items = build_dock_items(&self.pinned_config, &running_apps);
+        self.replace_dock_items(dock_items.clone())?;
+        Ok(dock_items)
     }
 }

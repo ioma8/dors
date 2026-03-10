@@ -18,8 +18,7 @@ export function renderDock(root: HTMLElement, { items, onActivate }: RenderDockO
 
   const title = document.createElement("div");
   title.className = "dock-title";
-  title.innerHTML =
-    '<p class="dock-kicker">dors</p><h1>Living dock</h1><p class="dock-copy">Pinned imports first, active apps glowing above the shelf.</p>';
+  title.innerHTML = '<p class="dock-kicker">dors</p>';
   panel.append(title);
 
   if (items.length === 0) {

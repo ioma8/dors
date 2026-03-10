@@ -28,6 +28,44 @@ fn dock_import_parses_pinned_apps_in_order_from_fixture() {
 }
 
 #[test]
+fn dock_import_normalizes_file_urls_to_application_paths() {
+    let fixture = br#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>persistent-apps</key>
+  <array>
+    <dict>
+      <key>tile-data</key>
+      <dict>
+        <key>bundle-identifier</key>
+        <string>com.apple.Notes</string>
+        <key>file-label</key>
+        <string>Notes</string>
+        <key>file-data</key>
+        <dict>
+          <key>_CFURLString</key>
+          <string>file:///System/Applications/Notes.app/</string>
+          <key>_CFURLStringType</key>
+          <integer>15</integer>
+        </dict>
+      </dict>
+    </dict>
+  </array>
+</dict>
+</plist>"#;
+
+    let reader = DockImportReader;
+    let result = reader.parse_plist_bytes(fixture).expect("fixture should parse");
+
+    assert_eq!(result.apps.len(), 1);
+    assert_eq!(
+        result.apps[0].identity.path,
+        PathBuf::from("/System/Applications/Notes.app")
+    );
+}
+
+#[test]
 fn dock_import_skips_invalid_entries_and_collects_warnings() {
     let fixture = include_bytes!("fixtures/dock_prefs_sample.plist");
 

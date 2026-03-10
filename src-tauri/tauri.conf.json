@@ -11,12 +11,18 @@
   },
   "app": {
     "withGlobalTauri": true,
+    "macOSPrivateApi": true,
     "windows": [
       {
         "title": "dors",
-        "width": 1280,
-        "height": 240,
-        "resizable": true
+        "width": 1180,
+        "height": 168,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false
       }
     ],
     "security": {

@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use dors_tauri_lib::app_state::AppState;
+use dors_tauri_lib::config::DockConfig;
 use dors_tauri_lib::domain::{AppIdentity, DockItemView};
 
 fn dock_item(name: &str, path: &str) -> DockItemView {
@@ -19,7 +20,7 @@ fn dock_item(name: &str, path: &str) -> DockItemView {
 
 #[test]
 fn app_state_replaces_dock_items_when_running_apps_change() {
-    let state = AppState::new(vec![dock_item("Safari", "/Applications/Safari.app")]);
+    let state = AppState::new(DockConfig::default());
     let replacement = vec![dock_item(
         "Terminal",
         "/System/Applications/Utilities/Terminal.app",

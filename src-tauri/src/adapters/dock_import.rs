@@ -83,8 +83,18 @@ fn parse_pinned_app(item: &Value) -> Option<PinnedApp> {
     Some(PinnedApp {
         identity: AppIdentity {
             bundle_id,
-            path: PathBuf::from(path),
+            path: normalize_dock_path(path),
         },
         display_name,
     })
+}
+
+fn normalize_dock_path(path: &str) -> PathBuf {
+    let trimmed = path.trim_end_matches('/');
+    if let Some(without_scheme) = trimmed.strip_prefix("file://") {
+        let decoded = without_scheme.replace("%20", " ");
+        return PathBuf::from(decoded);
+    }
+
+    PathBuf::from(trimmed)
 }

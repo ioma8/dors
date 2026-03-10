@@ -3,9 +3,9 @@ import { invoke } from "@tauri-apps/api/core";
 import type { DockItem } from "../components/types";
 
 type LaunchPayload = {
-  bundleId: string | null;
+  bundle_id: string | null;
   path: string;
-  isRunning: boolean;
+  is_running: boolean;
 };
 
 const fallbackItems: DockItem[] = [
@@ -71,9 +71,9 @@ export async function triggerLaunch(item: DockItem): Promise<void> {
   }
 
   const payload: LaunchPayload = {
-    bundleId: item.bundleId,
+    bundle_id: item.bundleId,
     path: item.path,
-    isRunning: item.isRunning,
+    is_running: item.isRunning,
   };
 
   await invoke("trigger_launch", { request: payload });
