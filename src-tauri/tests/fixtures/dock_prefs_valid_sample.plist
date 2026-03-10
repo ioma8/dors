@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>persistent-apps</key>
+  <array>
+    <dict>
+      <key>tile-data</key>
+      <dict>
+        <key>bundle-identifier</key>
+        <string>com.apple.Safari</string>
+        <key>file-label</key>
+        <string>Safari</string>
+        <key>file-data</key>
+        <dict>
+          <key>_CFURLString</key>
+          <string>/Applications/Safari.app</string>
+          <key>_CFURLStringType</key>
+          <integer>0</integer>
+        </dict>
+      </dict>
+    </dict>
+    <dict>
+      <key>tile-data</key>
+      <dict>
+        <key>bundle-identifier</key>
+        <string>com.apple.mail</string>
+        <key>file-label</key>
+        <string>Mail</string>
+        <key>file-data</key>
+        <dict>
+          <key>_CFURLString</key>
+          <string>/System/Applications/Mail.app</string>
+          <key>_CFURLStringType</key>
+          <integer>0</integer>
+        </dict>
+      </dict>
+    </dict>
+  </array>
+</dict>
+</plist>
