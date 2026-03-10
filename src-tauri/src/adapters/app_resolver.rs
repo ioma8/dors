@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AppResolverRecord {
@@ -37,7 +37,7 @@ fn normalize_app_path(path: PathBuf) -> PathBuf {
     PathBuf::from(trimmed)
 }
 
-fn derive_display_name(path: &PathBuf) -> String {
+fn derive_display_name(path: &Path) -> String {
     path.file_stem()
         .and_then(|value| value.to_str())
         .unwrap_or("Unknown App")

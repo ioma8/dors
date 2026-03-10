@@ -29,5 +29,8 @@ fn app_state_replaces_dock_items_when_running_apps_change() {
         .replace_dock_items(replacement.clone())
         .expect("replace should succeed");
 
-    assert_eq!(state.dock_items().expect("load should succeed"), replacement);
+    assert_eq!(
+        state.dock_items().expect("load should succeed"),
+        replacement
+    );
 }
