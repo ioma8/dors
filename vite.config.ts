@@ -1,10 +1,13 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 
 // @ts-expect-error process is a Node global in the Vite config runtime.
 const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig({
   clearScreen: false,
+  test: {
+    environment: "jsdom",
+  },
   server: {
     port: 1420,
     strictPort: true,
