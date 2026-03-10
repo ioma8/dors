@@ -13,7 +13,7 @@ const DOCK_PLIST_RELATIVE_PATH: &str = "Library/Preferences/com.apple.dock.plist
 #[derive(Debug, Default)]
 pub struct DockImportReader;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DockImportResult {
     pub apps: Vec<PinnedApp>,
     pub warnings: Vec<String>,
