@@ -66,4 +66,13 @@ impl AppState {
             .map(|items| items.clone())
             .map_err(|_| "dock state lock poisoned".to_string())
     }
+
+    pub fn replace_dock_items(&self, dock_items: Vec<DockItemView>) -> Result<(), String> {
+        self.dock_items
+            .lock()
+            .map(|mut items| {
+                *items = dock_items;
+            })
+            .map_err(|_| "dock state lock poisoned".to_string())
+    }
 }
