@@ -1,9 +1,9 @@
 #[cfg(target_os = "macos")]
-use objc2::sel;
-#[cfg(target_os = "macos")]
 use objc2::runtime::AnyObject;
+#[cfg(target_os = "macos")]
+use objc2::sel;
 
-use crate::native_app::dock_item_view::{build_item_button, ITEM_HEIGHT, ITEM_WIDTH};
+use crate::native_app::dock_item_view::{ITEM_HEIGHT, ITEM_WIDTH, build_item_button};
 use crate::native_app::view_model::NativeDockItemModel;
 
 const ITEM_SPACING: f64 = 12.0;
@@ -37,8 +37,13 @@ pub fn build_dock_view(
 
     for (index, model) in models.iter().enumerate() {
         let origin_x = start_x + index as f64 * (ITEM_WIDTH + ITEM_SPACING);
-        let item_view =
-            build_item_button(model, origin_x, index, Some(target), Some(sel!(activateDockItem:)))?;
+        let item_view = build_item_button(
+            model,
+            origin_x,
+            index,
+            Some(target),
+            Some(sel!(activateDockItem:)),
+        )?;
         root_view.addSubview(&item_view);
     }
 

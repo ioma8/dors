@@ -26,7 +26,10 @@ pub fn resolve_icon_path_from_bundle(app_path: &Path) -> Option<PathBuf> {
     };
     let resource_path = PathBuf::from("Contents/Resources").join(resource_name);
 
-    app_path.join(&resource_path).is_file().then_some(resource_path)
+    app_path
+        .join(&resource_path)
+        .is_file()
+        .then_some(resource_path)
 }
 
 pub fn load_icon_data_url(app_path: &Path) -> Option<String> {

@@ -1,32 +1,16 @@
 # dors
 
-`dors` is a Tauri-based macOS dock replacement prototype.
+`dors` is a native Rust/AppKit macOS dock replacement prototype.
 
 ## Prerequisites
 
 - macOS
 - Rust toolchain
-- Node.js and npm
-- Tauri desktop prerequisites for macOS
-
-## Install
-
-```bash
-npm install
-```
 
 ## Run In Development
 
-Start the frontend and Tauri desktop app together:
-
 ```bash
-npm run tauri dev
-```
-
-If you only want the web UI in the browser:
-
-```bash
-npm run dev
+cargo run --manifest-path src-tauri/Cargo.toml
 ```
 
 ## Verify
@@ -38,15 +22,7 @@ cargo check --manifest-path src-tauri/Cargo.toml
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-Frontend:
-
-```bash
-npm test
-npm run build
-```
-
 ## Notes
 
-- The current implementation includes backend state/config/import logic, a custom dock UI, and refresh/test scaffolding.
-- Some macOS-native behavior is still prototype-level scaffolding rather than full production integration.
-- Manual macOS checks are documented in [`docs/manual-test-macos-dock-replacement.md`](docs/manual-test-macos-dock-replacement.md).
+- The current implementation uses native AppKit for the dock shell and reuses Rust backend logic for import, config, launch, icons, and running-app state.
+- Manual macOS checks for the native rewrite are documented in `docs/plans/2026-03-11-native-appkit-manual-checklist.md`.

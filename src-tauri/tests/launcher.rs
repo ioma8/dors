@@ -74,3 +74,21 @@ tell application \"Finder\" to reopen"
         )
     );
 }
+
+#[test]
+fn running_app_activation_script_reopens_the_app_window() {
+    let request = LaunchRequest {
+        bundle_id: Some("com.apple.Safari".to_string()),
+        path: PathBuf::from("/Applications/Safari.app"),
+        is_running: true,
+    };
+
+    assert_eq!(
+        activation_script(&request),
+        Some(
+            "tell application id \"com.apple.Safari\" to activate\n\
+tell application id \"com.apple.Safari\" to reopen"
+                .to_string()
+        )
+    );
+}

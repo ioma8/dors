@@ -1,5 +1,5 @@
 use dors_tauri_lib::native_app::app::startup_configuration;
-use dors_tauri_lib::native_app::layout::{bottom_center_panel_placement, PanelPlacement};
+use dors_tauri_lib::native_app::layout::{PanelPlacement, bottom_center_panel_placement};
 
 #[test]
 fn bottom_center_panel_anchors_to_full_monitor_bounds() {

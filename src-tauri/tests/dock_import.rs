@@ -7,7 +7,9 @@ fn dock_import_parses_pinned_apps_in_order_from_fixture() {
     let fixture = include_bytes!("fixtures/dock_prefs_valid_sample.plist");
 
     let reader = DockImportReader;
-    let result = reader.parse_plist_bytes(fixture).expect("fixture should parse");
+    let result = reader
+        .parse_plist_bytes(fixture)
+        .expect("fixture should parse");
 
     assert_eq!(result.warnings, Vec::<String>::new());
     assert_eq!(result.apps.len(), 2);
@@ -56,7 +58,9 @@ fn dock_import_normalizes_file_urls_to_application_paths() {
 </plist>"#;
 
     let reader = DockImportReader;
-    let result = reader.parse_plist_bytes(fixture).expect("fixture should parse");
+    let result = reader
+        .parse_plist_bytes(fixture)
+        .expect("fixture should parse");
 
     assert_eq!(result.apps.len(), 1);
     assert_eq!(
@@ -70,7 +74,9 @@ fn dock_import_skips_invalid_entries_and_collects_warnings() {
     let fixture = include_bytes!("fixtures/dock_prefs_sample.plist");
 
     let reader = DockImportReader;
-    let result = reader.parse_plist_bytes(fixture).expect("fixture should parse");
+    let result = reader
+        .parse_plist_bytes(fixture)
+        .expect("fixture should parse");
 
     assert_eq!(result.apps.len(), 2);
     assert_eq!(result.warnings.len(), 1);

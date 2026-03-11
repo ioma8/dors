@@ -1,11 +1,11 @@
 use std::cell::RefCell;
 
 #[cfg(target_os = "macos")]
-use objc2::{DefinedClass, MainThreadOnly, define_class, msg_send, sel};
-#[cfg(target_os = "macos")]
 use objc2::rc::Retained;
 #[cfg(target_os = "macos")]
 use objc2::runtime::AnyObject;
+#[cfg(target_os = "macos")]
+use objc2::{DefinedClass, MainThreadOnly, define_class, msg_send, sel};
 #[cfg(target_os = "macos")]
 use objc2_app_kit::{NSControl, NSPanel};
 #[cfg(target_os = "macos")]
@@ -93,12 +93,8 @@ impl DockController {
 
     pub fn render_current_models(&self) -> Result<(), String> {
         let state = self.ivars().borrow();
-        let content_view = build_dock_view(
-            &state.models,
-            state.panel_width,
-            state.panel_height,
-            self,
-        )?;
+        let content_view =
+            build_dock_view(&state.models, state.panel_width, state.panel_height, self)?;
         state.panel.setContentView(Some(&content_view));
         Ok(())
     }

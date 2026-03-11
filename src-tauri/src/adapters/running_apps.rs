@@ -1,5 +1,5 @@
-use std::process::Command;
 use std::path::PathBuf;
+use std::process::Command;
 
 use crate::domain::{AppIdentity, RunningApp};
 
@@ -47,8 +47,13 @@ pub fn read_running_apps() -> Result<Vec<RunningApp>, String> {
     }
 
     let list = String::from_utf8_lossy(&raw.stdout);
-    let active_name = String::from_utf8_lossy(&frontmost.stdout).trim().to_string();
-    Ok(normalize_running_apps(parse_lsappinfo_list(&list, &active_name)))
+    let active_name = String::from_utf8_lossy(&frontmost.stdout)
+        .trim()
+        .to_string();
+    Ok(normalize_running_apps(parse_lsappinfo_list(
+        &list,
+        &active_name,
+    )))
 }
 
 pub fn parse_lsappinfo_list(raw: &str, active_name: &str) -> Vec<RunningAppSnapshot> {

@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use dors_tauri_lib::domain::{AppIdentity, DockItemView};
-use dors_tauri_lib::native_app::view_model::{reconcile_items, NativeDockItemModel, ReconcileOp};
+use dors_tauri_lib::native_app::view_model::{NativeDockItemModel, ReconcileOp, reconcile_items};
 
 fn dock_item(
     bundle_id: Option<&str>,

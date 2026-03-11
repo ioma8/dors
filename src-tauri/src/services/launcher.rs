@@ -35,7 +35,15 @@ where
     Activate: Fn(&LaunchRequest) -> LaunchResult,
     Launch: Fn(&LaunchRequest) -> LaunchResult,
 {
-    if request.is_running {
+    eprintln!(
+        "[dors-debug] trigger_launch request bundle_id={:?} path={} is_running={} frontmost_before={:?}",
+        request.bundle_id,
+        request.path.display(),
+        request.is_running,
+        frontmost_app_name()
+    );
+
+    let action = if request.is_running {
         match activate(request) {
             LaunchResult::Activated => LaunchAction::Activate,
             LaunchResult::ActivationFailed => match launch(request) {
@@ -53,7 +61,13 @@ where
             LaunchResult::Activated => LaunchAction::Activate,
             LaunchResult::ActivationFailed | LaunchResult::LaunchFailed => LaunchAction::NoOp,
         }
-    }
+    };
+
+    eprintln!(
+        "[dors-debug] trigger_launch result action={action:?} frontmost_after={:?}",
+        frontmost_app_name()
+    );
+    action
 }
 
 pub fn activate_app(request: &LaunchRequest) -> LaunchResult {
@@ -68,7 +82,11 @@ pub fn activate_app(request: &LaunchRequest) -> LaunchResult {
 }
 
 pub fn launch_app(request: &LaunchRequest) -> LaunchResult {
-    match Command::new("open").args(["-a"]).arg(&request.path).status() {
+    match Command::new("open")
+        .args(["-a"])
+        .arg(&request.path)
+        .status()
+    {
         Ok(status) if status.success() => LaunchResult::Launched,
         Ok(_) | Err(_) => LaunchResult::LaunchFailed,
     }
@@ -85,5 +103,24 @@ tell application \"Finder\" to reopen"
         );
     }
 
-    Some(format!("tell application id \"{bundle_id}\" to activate"))
+    Some(format!(
+        "tell application id \"{bundle_id}\" to activate\n\
+tell application id \"{bundle_id}\" to reopen"
+    ))
+}
+
+fn frontmost_app_name() -> Option<String> {
+    let output = Command::new("osascript")
+        .args([
+            "-e",
+            "tell application \"System Events\" to get name of first application process whose frontmost is true",
+        ])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    (!name.is_empty()).then_some(name)
 }

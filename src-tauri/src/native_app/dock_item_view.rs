@@ -27,8 +27,7 @@ pub fn build_item_button(
 ) -> Result<objc2::rc::Retained<objc2_app_kit::NSButton>, String> {
     use objc2::MainThreadOnly;
     use objc2_app_kit::{
-        NSButton, NSButtonType, NSCellImagePosition, NSColor, NSImageScaling,
-        NSTextField,
+        NSButton, NSButtonType, NSCellImagePosition, NSColor, NSImageScaling, NSTextField,
     };
     use objc2_foundation::{MainThreadMarker, NSPoint, NSRect, NSSize, NSString};
 
@@ -80,10 +79,7 @@ pub fn build_item_button(
 }
 
 #[cfg(not(target_os = "macos"))]
-pub fn build_item_view(
-    _model: &NativeDockItemModel,
-    _origin_x: f64,
-) -> Result<(), String> {
+pub fn build_item_view(_model: &NativeDockItemModel, _origin_x: f64) -> Result<(), String> {
     Err("native dock item view is only available on macOS".to_string())
 }
 

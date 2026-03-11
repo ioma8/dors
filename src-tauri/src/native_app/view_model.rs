@@ -19,10 +19,21 @@ pub struct NativeDockItemModel {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ReconcileOp {
-    Insert { index: usize, item: NativeDockItemModel },
-    Update { index: usize, item: NativeDockItemModel },
-    Replace { index: usize, item: NativeDockItemModel },
-    Remove { index: usize },
+    Insert {
+        index: usize,
+        item: NativeDockItemModel,
+    },
+    Update {
+        index: usize,
+        item: NativeDockItemModel,
+    },
+    Replace {
+        index: usize,
+        item: NativeDockItemModel,
+    },
+    Remove {
+        index: usize,
+    },
 }
 
 impl NativeDockItemModel {
@@ -44,7 +55,10 @@ impl NativeDockItemModel {
 }
 
 pub fn build_models(items: &[DockItemView]) -> Vec<NativeDockItemModel> {
-    items.iter().map(NativeDockItemModel::from_dock_item).collect()
+    items
+        .iter()
+        .map(NativeDockItemModel::from_dock_item)
+        .collect()
 }
 
 pub fn reconcile_items(

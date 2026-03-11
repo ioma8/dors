@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use crate::adapters::{dock_import::DockImportReader, icon_loader, running_apps};
 use crate::app_state::{self, AppState};
 use crate::config::{ConfigLoad, ConfigStore, DockConfig};
-use crate::native_app::view_model::{build_models, NativeDockItemModel};
+use crate::native_app::view_model::{NativeDockItemModel, build_models};
 
 pub fn build_refresh_models<LoadIcon>(
     state: &AppState,
