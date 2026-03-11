@@ -10,7 +10,7 @@
 ## Run In Development
 
 ```bash
-cargo run --manifest-path src-tauri/Cargo.toml
+cargo run
 ```
 
 ## Verify
@@ -18,8 +18,8 @@ cargo run --manifest-path src-tauri/Cargo.toml
 Backend:
 
 ```bash
-cargo check --manifest-path src-tauri/Cargo.toml
-cargo test --manifest-path src-tauri/Cargo.toml
+cargo check
+cargo test
 ```
 
 ## Notes
