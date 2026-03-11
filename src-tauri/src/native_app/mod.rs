@@ -4,4 +4,5 @@ pub mod dock_item_view;
 pub mod dock_view;
 pub mod layout;
 pub mod panel;
+pub mod refresh;
 pub mod view_model;

@@ -3,8 +3,10 @@ use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy, NSScreen};
 #[cfg(target_os = "macos")]
 use objc2_foundation::MainThreadMarker;
 
+use crate::native_app::dock_view::build_dock_view;
 use crate::native_app::layout::bottom_center_panel_placement;
 use crate::native_app::panel::build_overlay_panel;
+use crate::native_app::refresh::load_startup_models;
 use crate::window_level::OVERLAY_WINDOW_LEVEL;
 
 const DEFAULT_PANEL_WIDTH: u32 = 1180;
@@ -44,7 +46,10 @@ pub fn run() -> Result<(), String> {
         config.panel_width,
         config.panel_height,
     );
-    let _panel = build_overlay_panel(placement, config.panel_width, config.panel_height)?;
+    let panel = build_overlay_panel(placement, config.panel_width, config.panel_height)?;
+    let models = load_startup_models().unwrap_or_default();
+    let dock_view = build_dock_view(&models, config.panel_width, config.panel_height)?;
+    panel.setContentView(Some(&dock_view));
 
     let _ = app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
     app.run();
