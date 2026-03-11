@@ -4,6 +4,7 @@ pub mod adapters;
 pub mod app_state;
 pub mod config;
 pub mod domain;
+pub mod native_app;
 pub mod services;
 pub mod window_level;
 pub mod window_position;
@@ -34,11 +35,17 @@ fn trigger_launch(request: services::launcher::LaunchRequest) -> services::launc
     )
 }
 
+#[tauri::command]
+fn debug_log(message: String) {
+    eprintln!("[dors-debug] {message}");
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() -> tauri::Result<()> {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            configure_overlay_app()?;
             let app_data_dir = app
                 .path()
                 .app_data_dir()
@@ -55,7 +62,11 @@ pub fn run() -> tauri::Result<()> {
             position_main_window(app)?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_dock_state, trigger_launch])
+        .invoke_handler(tauri::generate_handler![
+            debug_log,
+            get_dock_state,
+            trigger_launch
+        ])
         .run(tauri::generate_context!())
 }
 
@@ -96,24 +107,43 @@ fn position_main_window<R: tauri::Runtime>(
         placement.x,
         placement.y,
     )))?;
-    set_overlay_window_level(&window)?;
-    window.set_focus()?;
+    configure_overlay_window(&window)?;
     Ok(())
 }
 
 #[cfg(target_os = "macos")]
-fn set_overlay_window_level<R: tauri::Runtime>(
+fn configure_overlay_app() -> Result<(), Box<dyn std::error::Error>> {
+    let marker = objc2_foundation::MainThreadMarker::new()
+        .ok_or("overlay app configuration must run on the main thread")?;
+    let ns_app = objc2_app_kit::NSApplication::sharedApplication(marker);
+    let _ = ns_app.setActivationPolicy(objc2_app_kit::NSApplicationActivationPolicy::Accessory);
+    ns_app.deactivate();
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn configure_overlay_app() -> Result<(), Box<dyn std::error::Error>> {
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn configure_overlay_window<R: tauri::Runtime>(
     window: &tauri::WebviewWindow<R>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     window.with_webview(|webview| unsafe {
         let ns_window: &objc2_app_kit::NSWindow = &*webview.ns_window().cast();
+        let style_mask = ns_window.styleMask();
+        ns_window.setStyleMask(objc2_app_kit::NSWindowStyleMask(
+            window_level::overlay_style_mask(style_mask.0),
+        ));
         ns_window.setLevel(window_level::OVERLAY_WINDOW_LEVEL);
+        ns_window.setHidesOnDeactivate(false);
     })?;
     Ok(())
 }
 
 #[cfg(not(target_os = "macos"))]
-fn set_overlay_window_level<R: tauri::Runtime>(
+fn configure_overlay_window<R: tauri::Runtime>(
     _window: &tauri::WebviewWindow<R>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
