@@ -7,7 +7,7 @@ edition = "2024"
 
 [lib]
 name = "dors"
-path = "src-tauri/src/lib.rs"
+path = "src/lib.rs"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [[bin]]
