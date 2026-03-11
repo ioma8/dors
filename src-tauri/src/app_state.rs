@@ -87,4 +87,11 @@ impl AppState {
         self.replace_dock_items(dock_items.clone())?;
         Ok(dock_items)
     }
+
+    pub fn refresh_snapshot(
+        &self,
+        running_apps: Vec<RunningApp>,
+    ) -> Result<Vec<DockItemView>, String> {
+        self.refresh_with_running_apps(running_apps)
+    }
 }
