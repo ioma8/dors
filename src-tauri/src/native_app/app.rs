@@ -1,8 +1,10 @@
 #[cfg(target_os = "macos")]
-use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
+use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy, NSScreen};
 #[cfg(target_os = "macos")]
 use objc2_foundation::MainThreadMarker;
 
+use crate::native_app::layout::bottom_center_panel_placement;
+use crate::native_app::panel::build_overlay_panel;
 use crate::window_level::OVERLAY_WINDOW_LEVEL;
 
 const DEFAULT_PANEL_WIDTH: u32 = 1180;
@@ -30,6 +32,20 @@ pub fn run() -> Result<(), String> {
     let marker = MainThreadMarker::new()
         .ok_or_else(|| "native app bootstrap must run on the main thread".to_string())?;
     let app = NSApplication::sharedApplication(marker);
+    let screen =
+        NSScreen::mainScreen(marker).ok_or_else(|| "no main screen available".to_string())?;
+    let frame = screen.frame();
+    let config = startup_configuration();
+    let placement = bottom_center_panel_placement(
+        frame.origin.x as i32,
+        frame.origin.y as i32,
+        frame.size.width as u32,
+        frame.size.height as u32,
+        config.panel_width,
+        config.panel_height,
+    );
+    let _panel = build_overlay_panel(placement, config.panel_width, config.panel_height)?;
+
     let _ = app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
     app.run();
     Ok(())

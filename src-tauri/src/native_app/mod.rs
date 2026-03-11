@@ -1,4 +1,7 @@
 pub mod app;
 pub mod app_delegate;
+pub mod dock_item_view;
+pub mod dock_view;
 pub mod layout;
+pub mod panel;
 pub mod view_model;
