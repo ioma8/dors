@@ -1,8 +1,6 @@
 use std::path::PathBuf;
 
-use dors::adapters::app_resolver::{
-    AppMetadata, AppResolverRecord, resolve_app_metadata,
-};
+use dors::adapters::app_resolver::{AppMetadata, AppResolverRecord, resolve_app_metadata};
 
 #[test]
 fn app_resolver_returns_name_identity_path_and_icon_reference() {

@@ -5,7 +5,7 @@
 Run the native app with:
 
 ```bash
-cargo run --manifest-path src-tauri/Cargo.toml
+cargo run
 ```
 
 ## Manual Checks
