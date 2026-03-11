@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
-use dors_tauri_lib::config::{ConfigLoad, ConfigStore, DockConfig};
-use dors_tauri_lib::domain::{AppIdentity, PinnedApp};
+use dors::config::{ConfigLoad, ConfigStore, DockConfig};
+use dors::domain::{AppIdentity, PinnedApp};
 
 fn sample_pinned_app(path: PathBuf) -> PinnedApp {
     PinnedApp {

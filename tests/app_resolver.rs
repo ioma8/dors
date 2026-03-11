@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use dors_tauri_lib::adapters::app_resolver::{
+use dors::adapters::app_resolver::{
     AppMetadata, AppResolverRecord, resolve_app_metadata,
 };
 

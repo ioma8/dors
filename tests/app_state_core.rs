@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
-use dors_tauri_lib::app_state::AppState;
-use dors_tauri_lib::config::DockConfig;
-use dors_tauri_lib::domain::{AppIdentity, PinnedApp, RunningApp};
+use dors::app_state::AppState;
+use dors::config::DockConfig;
+use dors::domain::{AppIdentity, PinnedApp, RunningApp};
 
 #[test]
 fn app_state_refresh_returns_stable_items_for_native_shell() {

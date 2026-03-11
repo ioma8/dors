@@ -1,4 +1,4 @@
-use dors_tauri_lib::window_level::{
+use dors::window_level::{
     DOCK_WINDOW_LEVEL, NONACTIVATING_PANEL_STYLE_MASK, OVERLAY_WINDOW_LEVEL,
     VISIBLE_DOCK_WINDOW_LAYER, overlay_style_mask,
 };

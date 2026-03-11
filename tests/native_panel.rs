@@ -1,4 +1,4 @@
-use dors_tauri_lib::native_app::panel::{PanelConfiguration, panel_configuration};
+use dors::native_app::panel::{PanelConfiguration, panel_configuration};
 
 #[test]
 fn panel_configuration_uses_bottom_overlay_window_semantics() {

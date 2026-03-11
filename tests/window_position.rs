@@ -1,4 +1,4 @@
-use dors_tauri_lib::window_position::{DockWindowPlacement, bottom_center_placement};
+use dors::window_position::{DockWindowPlacement, bottom_center_placement};
 
 #[test]
 fn window_position_centers_the_dock_on_the_full_monitor_bounds() {

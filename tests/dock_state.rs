@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
-use dors_tauri_lib::config::DockConfig;
-use dors_tauri_lib::domain::{AppIdentity, PinnedApp, RunningApp};
-use dors_tauri_lib::services::dock_state::build_dock_items;
+use dors::config::DockConfig;
+use dors::domain::{AppIdentity, PinnedApp, RunningApp};
+use dors::services::dock_state::build_dock_items;
 
 fn pinned(bundle_id: Option<&str>, path: &str, display_name: &str) -> PinnedApp {
     PinnedApp {

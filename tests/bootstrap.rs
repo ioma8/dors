@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
-use dors_tauri_lib::adapters::dock_import::DockImportResult;
-use dors_tauri_lib::app_state::bootstrap_pinned_apps;
-use dors_tauri_lib::config::{ConfigLoad, DockConfig};
-use dors_tauri_lib::domain::{AppIdentity, PinnedApp};
+use dors::adapters::dock_import::DockImportResult;
+use dors::app_state::bootstrap_pinned_apps;
+use dors::config::{ConfigLoad, DockConfig};
+use dors::domain::{AppIdentity, PinnedApp};
 
 fn sample_import() -> DockImportResult {
     DockImportResult {

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use dors_tauri_lib::services::launcher::{
+use dors::services::launcher::{
     LaunchAction, LaunchRequest, LaunchResult, activation_script, launch_or_activate,
 };
 

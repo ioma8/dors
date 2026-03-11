@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
-use dors_tauri_lib::app_state::AppState;
-use dors_tauri_lib::config::DockConfig;
-use dors_tauri_lib::domain::{AppIdentity, DockItemView};
+use dors::app_state::AppState;
+use dors::config::DockConfig;
+use dors::domain::{AppIdentity, DockItemView};
 
 fn dock_item(name: &str, path: &str) -> DockItemView {
     DockItemView {

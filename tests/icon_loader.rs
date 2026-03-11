@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use dors_tauri_lib::adapters::icon_loader::resolve_icon_path_from_bundle;
+use dors::adapters::icon_loader::resolve_icon_path_from_bundle;
 
 #[test]
 fn icon_loader_resolves_cf_bundle_icon_file_without_extension() {

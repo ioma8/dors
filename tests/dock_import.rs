@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use dors_tauri_lib::adapters::dock_import::DockImportReader;
+use dors::adapters::dock_import::DockImportReader;
 
 #[test]
 fn dock_import_parses_pinned_apps_in_order_from_fixture() {

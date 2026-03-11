@@ -1,9 +1,9 @@
 use std::path::{Path, PathBuf};
 
-use dors_tauri_lib::app_state::AppState;
-use dors_tauri_lib::config::DockConfig;
-use dors_tauri_lib::domain::{AppIdentity, PinnedApp, RunningApp};
-use dors_tauri_lib::native_app::refresh::build_refresh_models;
+use dors::app_state::AppState;
+use dors::config::DockConfig;
+use dors::domain::{AppIdentity, PinnedApp, RunningApp};
+use dors::native_app::refresh::build_refresh_models;
 
 #[test]
 fn refresh_rebuilds_native_items_from_running_apps() {

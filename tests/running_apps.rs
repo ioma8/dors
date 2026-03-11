@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use dors_tauri_lib::adapters::running_apps::{
+use dors::adapters::running_apps::{
     RunningAppSnapshot, normalize_running_apps, parse_lsappinfo_list,
 };
 

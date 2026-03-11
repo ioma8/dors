@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
-use dors_tauri_lib::native_app::interaction::launch_request_from_model;
-use dors_tauri_lib::native_app::view_model::NativeDockItemModel;
-use dors_tauri_lib::services::launcher::LaunchRequest;
+use dors::native_app::interaction::launch_request_from_model;
+use dors::native_app::view_model::NativeDockItemModel;
+use dors::services::launcher::LaunchRequest;
 
 #[test]
 fn interaction_model_builds_launch_request_for_clicked_item() {
