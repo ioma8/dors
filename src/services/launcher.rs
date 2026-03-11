@@ -71,6 +71,11 @@ where
 }
 
 pub fn activate_app(request: &LaunchRequest) -> LaunchResult {
+    #[cfg(target_os = "macos")]
+    if let LaunchResult::Activated = activate_app_natively(request) {
+        return LaunchResult::Activated;
+    }
+
     let Some(script) = activation_script(request) else {
         return LaunchResult::ActivationFailed;
     };
@@ -110,6 +115,11 @@ tell application id \"{bundle_id}\" to reopen"
 }
 
 fn frontmost_app_name() -> Option<String> {
+    #[cfg(target_os = "macos")]
+    if let Some(name) = native_frontmost_app_name() {
+        return Some(name);
+    }
+
     let output = Command::new("osascript")
         .args([
             "-e",
@@ -123,4 +133,40 @@ fn frontmost_app_name() -> Option<String> {
 
     let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
     (!name.is_empty()).then_some(name)
+}
+
+#[cfg(target_os = "macos")]
+fn activate_app_natively(request: &LaunchRequest) -> LaunchResult {
+    use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication};
+    use objc2_foundation::NSString;
+
+    let Some(bundle_id) = request.bundle_id.as_deref() else {
+        return LaunchResult::ActivationFailed;
+    };
+
+    let bundle_id = NSString::from_str(bundle_id);
+    let applications = NSRunningApplication::runningApplicationsWithBundleIdentifier(&bundle_id);
+    let Some(application) = applications.firstObject() else {
+        return LaunchResult::ActivationFailed;
+    };
+
+    let activation_options = NSApplicationActivationOptions::ActivateAllWindows;
+    if application.activateWithOptions(activation_options) {
+        if application.isHidden() {
+            let _ = application.unhide();
+        }
+        return LaunchResult::Activated;
+    }
+
+    LaunchResult::ActivationFailed
+}
+
+#[cfg(target_os = "macos")]
+fn native_frontmost_app_name() -> Option<String> {
+    use objc2_app_kit::NSWorkspace;
+
+    let workspace = NSWorkspace::sharedWorkspace();
+    let application = workspace.frontmostApplication()?;
+    let name = application.localizedName()?;
+    Some(name.to_string())
 }
