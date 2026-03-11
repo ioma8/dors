@@ -1,4 +1,9 @@
-use crate::native_app::dock_item_view::{build_item_view, ITEM_HEIGHT, ITEM_WIDTH};
+#[cfg(target_os = "macos")]
+use objc2::sel;
+#[cfg(target_os = "macos")]
+use objc2::runtime::AnyObject;
+
+use crate::native_app::dock_item_view::{build_item_button, ITEM_HEIGHT, ITEM_WIDTH};
 use crate::native_app::view_model::NativeDockItemModel;
 
 const ITEM_SPACING: f64 = 12.0;
@@ -8,6 +13,7 @@ pub fn build_dock_view(
     models: &[NativeDockItemModel],
     panel_width: u32,
     panel_height: u32,
+    target: &AnyObject,
 ) -> Result<objc2::rc::Retained<objc2_app_kit::NSView>, String> {
     use objc2::MainThreadOnly;
     use objc2_app_kit::NSView;
@@ -31,7 +37,8 @@ pub fn build_dock_view(
 
     for (index, model) in models.iter().enumerate() {
         let origin_x = start_x + index as f64 * (ITEM_WIDTH + ITEM_SPACING);
-        let item_view = build_item_view(model, origin_x)?;
+        let item_view =
+            build_item_button(model, origin_x, index, Some(target), Some(sel!(activateDockItem:)))?;
         root_view.addSubview(&item_view);
     }
 
@@ -43,6 +50,7 @@ pub fn build_dock_view(
     _models: &[NativeDockItemModel],
     _panel_width: u32,
     _panel_height: u32,
+    _target: &(),
 ) -> Result<(), String> {
     Err("native dock view is only available on macOS".to_string())
 }

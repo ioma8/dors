@@ -1,8 +1,12 @@
+use std::path::PathBuf;
+
 use crate::domain::DockItemView;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NativeDockItemModel {
     pub key: String,
+    pub bundle_id: Option<String>,
+    pub path: PathBuf,
     pub display_name: String,
     pub icon_src: String,
     pub shows_indicator: bool,
@@ -25,6 +29,8 @@ impl NativeDockItemModel {
     pub fn from_dock_item(item: &DockItemView) -> Self {
         Self {
             key: item.stable_key(),
+            bundle_id: item.identity.bundle_id.clone(),
+            path: item.identity.path.clone(),
             display_name: item.display_name.clone(),
             icon_src: item.icon_src.clone(),
             shows_indicator: item.is_running,

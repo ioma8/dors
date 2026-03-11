@@ -3,7 +3,7 @@ use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy, NSScreen};
 #[cfg(target_os = "macos")]
 use objc2_foundation::MainThreadMarker;
 
-use crate::native_app::dock_view::build_dock_view;
+use crate::native_app::interaction::DockController;
 use crate::native_app::layout::bottom_center_panel_placement;
 use crate::native_app::panel::build_overlay_panel;
 use crate::native_app::refresh::load_startup_models;
@@ -48,8 +48,15 @@ pub fn run() -> Result<(), String> {
     );
     let panel = build_overlay_panel(placement, config.panel_width, config.panel_height)?;
     let models = load_startup_models().unwrap_or_default();
-    let dock_view = build_dock_view(&models, config.panel_width, config.panel_height)?;
-    panel.setContentView(Some(&dock_view));
+    let controller = DockController::new(
+        marker,
+        panel,
+        config.panel_width,
+        config.panel_height,
+        models,
+    );
+    controller.render_current_models()?;
+    let _timer = controller.install_refresh_timer();
 
     let _ = app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
     app.run();

@@ -1,54 +1,64 @@
 #[cfg(target_os = "macos")]
 use base64::Engine;
 
+#[cfg(target_os = "macos")]
+use objc2::runtime::{AnyObject, Sel};
+
 use crate::native_app::view_model::NativeDockItemModel;
 
 pub const ITEM_WIDTH: f64 = 72.0;
 pub const ITEM_HEIGHT: f64 = 92.0;
-const ICON_SIZE: f64 = 56.0;
 
 #[cfg(target_os = "macos")]
 pub fn build_item_view(
     model: &NativeDockItemModel,
     origin_x: f64,
-) -> Result<objc2::rc::Retained<objc2_app_kit::NSView>, String> {
+) -> Result<objc2::rc::Retained<objc2_app_kit::NSButton>, String> {
+    build_item_button(model, origin_x, 0, None, None)
+}
+
+#[cfg(target_os = "macos")]
+pub fn build_item_button(
+    model: &NativeDockItemModel,
+    origin_x: f64,
+    index: usize,
+    target: Option<&AnyObject>,
+    action: Option<Sel>,
+) -> Result<objc2::rc::Retained<objc2_app_kit::NSButton>, String> {
     use objc2::MainThreadOnly;
     use objc2_app_kit::{
-        NSColor, NSImageAlignment, NSImageScaling, NSImageView, NSTextField, NSView,
+        NSButton, NSButtonType, NSCellImagePosition, NSColor, NSImageScaling,
+        NSTextField,
     };
     use objc2_foundation::{MainThreadMarker, NSPoint, NSRect, NSSize, NSString};
 
     let marker = MainThreadMarker::new()
         .ok_or_else(|| "item view creation must run on the main thread".to_string())?;
-    let item_view = NSView::initWithFrame(
-        NSView::alloc(marker),
+    let item_view = NSButton::initWithFrame(
+        NSButton::alloc(marker),
         NSRect::new(
             NSPoint::new(origin_x, 24.0),
             NSSize::new(ITEM_WIDTH, ITEM_HEIGHT),
         ),
     );
+    item_view.setButtonType(NSButtonType::MomentaryChange);
+    item_view.setBordered(true);
+    item_view.setTransparent(true);
+    item_view.setShowsBorderOnlyWhileMouseInside(true);
+    item_view.setTag(index as isize);
+    unsafe {
+        item_view.setTarget(target);
+        item_view.setAction(action);
+    }
 
     if let Some(icon) = icon_from_model(model, marker) {
-        let image_view = NSImageView::initWithFrame(
-            NSImageView::alloc(marker),
-            NSRect::new(
-                NSPoint::new((ITEM_WIDTH - ICON_SIZE) / 2.0, 20.0),
-                NSSize::new(ICON_SIZE, ICON_SIZE),
-            ),
-        );
-        image_view.setImageAlignment(NSImageAlignment::AlignCenter);
-        image_view.setImageScaling(NSImageScaling::ScaleProportionallyUpOrDown);
-        image_view.setImage(Some(&icon));
-        item_view.addSubview(&image_view);
+        item_view.setImage(Some(&icon));
+        item_view.setImagePosition(NSCellImagePosition::ImageOnly);
+        item_view.setImageScaling(NSImageScaling::ScaleProportionallyUpOrDown);
+        item_view.setImageHugsTitle(false);
     } else {
         let fallback = NSString::from_str(&placeholder_text(model));
-        let label = NSTextField::labelWithString(&fallback, marker);
-        label.setFrame(NSRect::new(
-            NSPoint::new((ITEM_WIDTH - 32.0) / 2.0, 28.0),
-            NSSize::new(32.0, 32.0),
-        ));
-        label.setTextColor(Some(&NSColor::whiteColor()));
-        item_view.addSubview(&label);
+        item_view.setTitle(&fallback);
     }
 
     if model.shows_indicator {
@@ -73,6 +83,17 @@ pub fn build_item_view(
 pub fn build_item_view(
     _model: &NativeDockItemModel,
     _origin_x: f64,
+) -> Result<(), String> {
+    Err("native dock item view is only available on macOS".to_string())
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn build_item_button(
+    _model: &NativeDockItemModel,
+    _origin_x: f64,
+    _index: usize,
+    _target: Option<&()>,
+    _action: Option<()>,
 ) -> Result<(), String> {
     Err("native dock item view is only available on macOS".to_string())
 }
