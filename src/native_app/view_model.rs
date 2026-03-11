@@ -44,7 +44,7 @@ impl NativeDockItemModel {
             path: item.identity.path.clone(),
             display_name: item.display_name.clone(),
             icon_src: item.icon_src.clone(),
-            shows_indicator: item.is_running,
+            shows_indicator: false,
             uses_placeholder_icon: item.icon_src.is_empty(),
             is_running: item.is_running,
             is_active: item.is_active,

@@ -92,6 +92,6 @@ fn view_model_maps_dock_item_state_to_native_item_state() {
     assert_eq!(model.display_name, "WezTerm");
     assert!(model.is_running);
     assert!(model.is_active);
-    assert!(model.shows_indicator);
+    assert!(!model.shows_indicator);
     assert!(model.uses_placeholder_icon);
 }

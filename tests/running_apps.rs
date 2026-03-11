@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use dors::adapters::running_apps::{
-    RunningAppSnapshot, normalize_running_apps, parse_lsappinfo_list,
+    ActiveAppIdentity, RunningAppSnapshot, normalize_running_apps, parse_lsappinfo_list,
 };
 
 #[test]
@@ -66,11 +66,39 @@ fn running_apps_parse_visible_foreground_entries_from_lsappinfo() {
     pid = 901 type="UIElement" flavor=3 Version="1"
 "#;
 
-    let apps = parse_lsappinfo_list(raw, "Firefox");
+    let apps = parse_lsappinfo_list(
+        raw,
+        Some(&ActiveAppIdentity {
+            bundle_id: Some("org.mozilla.firefox".to_string()),
+            path: Some(PathBuf::from("/Applications/Firefox.app")),
+        }),
+    );
 
     assert_eq!(apps.len(), 1);
     assert_eq!(apps[0].display_name, "Firefox");
     assert_eq!(apps[0].bundle_id.as_deref(), Some("org.mozilla.firefox"));
     assert_eq!(apps[0].path, PathBuf::from("/Applications/Firefox.app"));
+    assert!(apps[0].is_active);
+}
+
+#[test]
+fn running_apps_marks_active_entry_by_path_when_names_differ() {
+    let raw = r#"
+42) "Visual Studio Code" ASN:0x0-0x40040:
+    bundleID="com.microsoft.VSCode"
+    bundle path="/Applications/Visual Studio Code.app"
+    executable path="/Applications/Visual Studio Code.app/Contents/MacOS/Electron"
+    pid = 2785 type="Foreground" flavor=3 Version="1"
+"#;
+
+    let apps = parse_lsappinfo_list(
+        raw,
+        Some(&ActiveAppIdentity {
+            bundle_id: Some("com.microsoft.VSCode".to_string()),
+            path: Some(PathBuf::from("/Applications/Visual Studio Code.app")),
+        }),
+    );
+
+    assert_eq!(apps.len(), 1);
     assert!(apps[0].is_active);
 }

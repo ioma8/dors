@@ -4,6 +4,12 @@ use std::process::Command;
 use crate::domain::{AppIdentity, RunningApp};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ActiveAppIdentity {
+    pub bundle_id: Option<String>,
+    pub path: Option<PathBuf>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RunningAppSnapshot {
     pub bundle_id: Option<String>,
     pub display_name: String,
@@ -35,28 +41,18 @@ pub fn read_running_apps() -> Result<Vec<RunningApp>, String> {
         return Err("lsappinfo list failed".to_string());
     }
 
-    let frontmost = Command::new("osascript")
-        .args([
-            "-e",
-            "tell application \"System Events\" to get name of first application process whose frontmost is true",
-        ])
-        .output()
-        .map_err(|error| format!("failed to execute osascript: {error}"))?;
-    if !frontmost.status.success() {
-        return Err("failed to determine frontmost app".to_string());
-    }
-
     let list = String::from_utf8_lossy(&raw.stdout);
-    let active_name = String::from_utf8_lossy(&frontmost.stdout)
-        .trim()
-        .to_string();
+    let active_identity = frontmost_app_identity();
     Ok(normalize_running_apps(parse_lsappinfo_list(
         &list,
-        &active_name,
+        active_identity.as_ref(),
     )))
 }
 
-pub fn parse_lsappinfo_list(raw: &str, active_name: &str) -> Vec<RunningAppSnapshot> {
+pub fn parse_lsappinfo_list(
+    raw: &str,
+    active_identity: Option<&ActiveAppIdentity>,
+) -> Vec<RunningAppSnapshot> {
     let mut apps = Vec::new();
     let mut current_name: Option<String> = None;
     let mut current_bundle_id: Option<String> = None;
@@ -71,7 +67,7 @@ pub fn parse_lsappinfo_list(raw: &str, active_name: &str) -> Vec<RunningAppSnaps
                 current_bundle_id.take(),
                 current_path.take(),
                 current_regular,
-                active_name,
+                active_identity,
             );
             current_name = Some(name);
             current_regular = false;
@@ -98,7 +94,7 @@ pub fn parse_lsappinfo_list(raw: &str, active_name: &str) -> Vec<RunningAppSnaps
         current_bundle_id,
         current_path,
         current_regular,
-        active_name,
+        active_identity,
     );
 
     apps
@@ -127,7 +123,7 @@ fn push_snapshot(
     bundle_id: Option<String>,
     path: Option<PathBuf>,
     activation_policy_regular: bool,
-    active_name: &str,
+    active_identity: Option<&ActiveAppIdentity>,
 ) {
     let Some(display_name) = name else {
         return;
@@ -139,11 +135,42 @@ fn push_snapshot(
         return;
     }
 
+    let normalized_path = normalize_app_path(path);
+    let is_active = active_identity.is_some_and(|active| {
+        active
+            .bundle_id
+            .as_ref()
+            .zip(bundle_id.as_ref())
+            .is_some_and(|(left, right)| left == right)
+            || active.path.as_ref().is_some_and(|active_path| {
+                normalize_app_path(active_path.clone()) == normalized_path
+            })
+    });
+
     apps.push(RunningAppSnapshot {
         bundle_id,
         display_name: display_name.clone(),
-        path,
+        path: normalized_path,
         activation_policy_regular,
-        is_active: display_name == active_name,
+        is_active,
     });
+}
+
+fn frontmost_app_identity() -> Option<ActiveAppIdentity> {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::NSWorkspace;
+
+        let workspace = NSWorkspace::sharedWorkspace();
+        let application = workspace.frontmostApplication()?;
+        let bundle_id = application.bundleIdentifier().map(|value| value.to_string());
+        let path = application
+            .bundleURL()
+            .and_then(|value| value.path())
+            .map(|value| PathBuf::from(value.to_string()));
+        return Some(ActiveAppIdentity { bundle_id, path });
+    }
+
+    #[allow(unreachable_code)]
+    None
 }
