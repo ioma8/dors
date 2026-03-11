@@ -75,3 +75,23 @@ fn reconcile_items_detects_insert_remove_and_update() {
         ]
     );
 }
+
+#[test]
+fn view_model_maps_dock_item_state_to_native_item_state() {
+    let item = dock_item(
+        Some("com.github.wez.wezterm"),
+        "/Applications/WezTerm.app",
+        "WezTerm",
+        true,
+        true,
+    );
+
+    let model = NativeDockItemModel::from_dock_item(&item);
+
+    assert_eq!(model.key, "bundle:com.github.wez.wezterm");
+    assert_eq!(model.display_name, "WezTerm");
+    assert!(model.is_running);
+    assert!(model.is_active);
+    assert!(model.shows_indicator);
+    assert!(model.uses_placeholder_icon);
+}

@@ -5,6 +5,8 @@ pub struct NativeDockItemModel {
     pub key: String,
     pub display_name: String,
     pub icon_src: String,
+    pub shows_indicator: bool,
+    pub uses_placeholder_icon: bool,
     pub is_running: bool,
     pub is_active: bool,
     pub is_pinned: bool,
@@ -25,12 +27,18 @@ impl NativeDockItemModel {
             key: item.stable_key(),
             display_name: item.display_name.clone(),
             icon_src: item.icon_src.clone(),
+            shows_indicator: item.is_running,
+            uses_placeholder_icon: item.icon_src.is_empty(),
             is_running: item.is_running,
             is_active: item.is_active,
             is_pinned: item.is_pinned,
             is_degraded: item.is_degraded,
         }
     }
+}
+
+pub fn build_models(items: &[DockItemView]) -> Vec<NativeDockItemModel> {
+    items.iter().map(NativeDockItemModel::from_dock_item).collect()
 }
 
 pub fn reconcile_items(
