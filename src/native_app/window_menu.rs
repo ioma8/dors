@@ -78,3 +78,82 @@ end tell\n\
 end tell"
     )
 }
+
+pub fn parse_window_title_lines(raw: &str) -> Vec<HoveredWindow> {
+    raw.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .enumerate()
+        .map(|(index, title)| HoveredWindow::new(index, title))
+        .collect()
+}
+
+#[cfg(target_os = "macos")]
+pub fn read_windows_for_app(
+    bundle_id: Option<&str>,
+    fallback_process_name: &str,
+) -> Result<Vec<HoveredWindow>, String> {
+    let process_name = resolve_process_name(bundle_id, fallback_process_name)?;
+    let script = format!(
+        "tell application \"System Events\"\n\
+tell application process \"{process_name}\"\n\
+set windowNames to name of every window\n\
+end tell\n\
+end tell\n\
+set AppleScript's text item delimiters to linefeed\n\
+return windowNames as text"
+    );
+    let output = Command::new("osascript")
+        .args(["-e", &script])
+        .output()
+        .map_err(|error| error.to_string())?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+
+    Ok(parse_window_title_lines(&String::from_utf8_lossy(&output.stdout)))
+}
+
+#[cfg(target_os = "macos")]
+pub fn activate_specific_window(
+    bundle_id: Option<&str>,
+    fallback_process_name: &str,
+    window_title: &str,
+) -> Result<(), String> {
+    let process_name = resolve_process_name(bundle_id, fallback_process_name)?;
+    let script = activation_script_for_window(&process_name, window_title);
+    let status = Command::new("osascript")
+        .args(["-e", &script])
+        .status()
+        .map_err(|error| error.to_string())?;
+
+    if status.success() {
+        return Ok(());
+    }
+
+    Err("failed to activate specific window".to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn resolve_process_name(bundle_id: Option<&str>, fallback_process_name: &str) -> Result<String, String> {
+    use objc2_app_kit::NSRunningApplication;
+    use objc2_foundation::NSString;
+
+    if let Some(bundle_id) = bundle_id {
+        let bundle_id = NSString::from_str(bundle_id);
+        let applications = NSRunningApplication::runningApplicationsWithBundleIdentifier(&bundle_id);
+        if let Some(application) = applications.firstObject() {
+            if let Some(name) = application.localizedName() {
+                return Ok(name.to_string());
+            }
+        }
+    }
+
+    if fallback_process_name.trim().is_empty() {
+        return Err("missing process name".to_string());
+    }
+
+    Ok(fallback_process_name.to_string())
+}
+#[cfg(target_os = "macos")]
+use std::process::Command;

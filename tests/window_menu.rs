@@ -1,6 +1,6 @@
 use dors::native_app::window_menu::{
     HoverDelayState, HoveredWindow, activation_script_for_window, filtered_hovered_windows,
-    should_show_window_menu,
+    parse_window_title_lines, should_show_window_menu,
 };
 
 #[test]
@@ -55,4 +55,14 @@ fn hover_menu_invalidates_stale_tokens_after_cancel_or_replace() {
     assert!(state.is_current(second, 2));
     assert!(!state.is_current(first, 1));
     assert!(!state.is_current(second, 1));
+}
+
+#[test]
+fn window_menu_parses_line_based_window_output_and_skips_blank_titles() {
+    let windows = parse_window_title_lines("Main\n\n   \nPreferences\n");
+
+    assert_eq!(
+        windows,
+        vec![HoveredWindow::new(0, "Main"), HoveredWindow::new(1, "Preferences")]
+    );
 }
