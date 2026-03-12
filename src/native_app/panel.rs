@@ -26,6 +26,16 @@ pub fn build_overlay_panel(
     width: u32,
     height: u32,
 ) -> Result<objc2::rc::Retained<objc2_app_kit::NSPanel>, String> {
+    build_panel(placement, width, height, panel_configuration())
+}
+
+#[cfg(target_os = "macos")]
+fn build_panel(
+    placement: PanelPlacement,
+    width: u32,
+    height: u32,
+    configuration: PanelConfiguration,
+) -> Result<objc2::rc::Retained<objc2_app_kit::NSPanel>, String> {
     use objc2::MainThreadOnly;
     use objc2_app_kit::{
         NSBackingStoreType, NSColor, NSPanel, NSScreen, NSWindowCollectionBehavior,
@@ -61,8 +71,8 @@ pub fn build_overlay_panel(
     panel.setBackgroundColor(Some(&NSColor::clearColor()));
     panel.setHasShadow(false);
     panel.setHidesOnDeactivate(false);
-    panel.setIgnoresMouseEvents(false);
-    panel.setLevel(panel_configuration().level);
+    panel.setIgnoresMouseEvents(configuration.ignores_mouse_events);
+    panel.setLevel(configuration.level);
     panel.setCollectionBehavior(behavior);
     panel.orderFrontRegardless();
 

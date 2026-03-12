@@ -133,9 +133,11 @@ fn interpolate_segment(
 #[derive(Clone, Debug, PartialEq)]
 pub struct DockWindowCandidate {
     pub owner_name: String,
+    pub window_name: Option<String>,
     pub layer: i32,
     pub width: f64,
     pub height: f64,
+    pub x: f64,
     pub y: f64,
 }
 
@@ -448,9 +450,11 @@ fn dock_window_candidate_from_type(entry: &CFType) -> Option<DockWindowCandidate
 
     Some(DockWindowCandidate {
         owner_name,
+        window_name: dictionary_string_value(&dictionary, WindowKeys::Name),
         layer,
         width: bounds.width(),
         height: bounds.height(),
+        x: bounds.origin.x,
         y: bounds.origin.y,
     })
 }
