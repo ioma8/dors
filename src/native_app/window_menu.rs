@@ -4,12 +4,55 @@ pub struct HoveredWindow {
     pub title: String,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct HoverToken {
+    version: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HoverDelayState {
+    delay_millis: u64,
+    current_item: Option<usize>,
+    version: u64,
+}
+
 impl HoveredWindow {
     pub fn new(index: usize, title: &str) -> Self {
         Self {
             index,
             title: title.to_string(),
         }
+    }
+}
+
+impl HoverDelayState {
+    pub fn new() -> Self {
+        Self {
+            delay_millis: 180,
+            current_item: None,
+            version: 0,
+        }
+    }
+
+    pub fn delay_millis(&self) -> u64 {
+        self.delay_millis
+    }
+
+    pub fn schedule_for_item(&mut self, item_index: usize) -> HoverToken {
+        self.version += 1;
+        self.current_item = Some(item_index);
+        HoverToken {
+            version: self.version,
+        }
+    }
+
+    pub fn cancel(&mut self) {
+        self.version += 1;
+        self.current_item = None;
+    }
+
+    pub fn is_current(&self, token: HoverToken, item_index: usize) -> bool {
+        self.current_item == Some(item_index) && self.version == token.version
     }
 }
 

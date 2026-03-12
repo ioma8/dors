@@ -1,5 +1,6 @@
 use dors::native_app::window_menu::{
-    HoveredWindow, activation_script_for_window, filtered_hovered_windows, should_show_window_menu,
+    HoverDelayState, HoveredWindow, activation_script_for_window, filtered_hovered_windows,
+    should_show_window_menu,
 };
 
 #[test]
@@ -31,4 +32,27 @@ fn window_menu_builds_specific_window_activation_script() {
     assert!(script.contains("application process \"Cursor\""));
     assert!(script.contains("first window whose name is \"README.md\""));
     assert!(script.contains("perform action \"AXRaise\""));
+}
+
+#[test]
+fn hover_menu_uses_a_short_default_delay() {
+    let state = HoverDelayState::new();
+
+    assert_eq!(state.delay_millis(), 180);
+}
+
+#[test]
+fn hover_menu_invalidates_stale_tokens_after_cancel_or_replace() {
+    let mut state = HoverDelayState::new();
+
+    let first = state.schedule_for_item(1);
+    assert!(state.is_current(first, 1));
+
+    state.cancel();
+    assert!(!state.is_current(first, 1));
+
+    let second = state.schedule_for_item(2);
+    assert!(state.is_current(second, 2));
+    assert!(!state.is_current(first, 1));
+    assert!(!state.is_current(second, 1));
 }
