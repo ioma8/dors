@@ -8,3 +8,4 @@ pub mod panel;
 pub mod refresh;
 pub mod system_dock;
 pub mod view_model;
+pub mod window_clamper;
