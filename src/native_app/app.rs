@@ -3,6 +3,7 @@ use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy, NSScreen};
 #[cfg(target_os = "macos")]
 use objc2_foundation::MainThreadMarker;
 
+use crate::native_app::dock_view::required_height;
 use crate::native_app::interaction::DockController;
 use crate::native_app::layout::bottom_center_panel_placement;
 use crate::native_app::panel::build_overlay_panel;
@@ -10,7 +11,6 @@ use crate::native_app::refresh::load_startup_models;
 use crate::native_app::system_dock::{
     install_restore_signal_handler, prepare_overlay_dock_mode, restore_shared_guard, shared_guard,
 };
-use crate::native_app::dock_view::required_height;
 use crate::window_level::OVERLAY_WINDOW_LEVEL;
 
 const DEFAULT_PANEL_WIDTH: u32 = 1180;

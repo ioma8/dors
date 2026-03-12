@@ -1,8 +1,3 @@
-use std::fmt::{Display, Formatter};
-#[cfg(target_os = "macos")]
-use std::process::Command;
-#[cfg(target_os = "macos")]
-use std::sync::{Arc, Mutex};
 #[cfg(target_os = "macos")]
 use core_foundation::array::CFArray;
 #[cfg(target_os = "macos")]
@@ -16,7 +11,12 @@ use core_foundation::string::CFString;
 #[cfg(target_os = "macos")]
 use core_graphics2::geometry::CGRect;
 #[cfg(target_os = "macos")]
-use core_graphics2::window::{CGWindowListOption, WindowKeys, copy_window_info, kCGNullWindowID};
+use core_graphics2::window::{copy_window_info, kCGNullWindowID, CGWindowListOption, WindowKeys};
+use std::fmt::{Display, Formatter};
+#[cfg(target_os = "macos")]
+use std::process::Command;
+#[cfg(target_os = "macos")]
+use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DockPreferencesSnapshot {
@@ -39,7 +39,8 @@ impl DockPreferencePlan {
     }
 
     pub fn restore_autohide(self) -> Option<bool> {
-        (self.snapshot.autohide_before != self.target_autohide()).then_some(self.snapshot.autohide_before)
+        (self.snapshot.autohide_before != self.target_autohide())
+            .then_some(self.snapshot.autohide_before)
     }
 
     pub fn restore_tilesize(self) -> Option<Option<i32>> {
@@ -59,15 +60,18 @@ pub fn parse_tilesize_output(output: &str) -> Option<i32> {
     output.trim().parse().ok()
 }
 
-pub fn adjust_tilesize_guess(current_tilesize: i32, observed_reserved_height: i32, target_reserved_height: i32) -> i32 {
+pub fn adjust_tilesize_guess(
+    current_tilesize: i32,
+    observed_reserved_height: i32,
+    target_reserved_height: i32,
+) -> i32 {
     if observed_reserved_height <= 0 || target_reserved_height <= 0 {
         return current_tilesize.max(16);
     }
 
-    let scaled =
-        ((current_tilesize as f64) * (target_reserved_height as f64)
-            / (observed_reserved_height as f64))
-            .round() as i32;
+    let scaled = ((current_tilesize as f64) * (target_reserved_height as f64)
+        / (observed_reserved_height as f64))
+        .round() as i32;
 
     scaled.clamp(16, 128)
 }
@@ -185,7 +189,9 @@ impl Display for SystemDockError {
             Self::InvalidTilesizeOutput(output) => {
                 write!(f, "unexpected Dock tilesize output: {}", output.trim())
             }
-            Self::MainThreadUnavailable => write!(f, "main thread unavailable for screen measurement"),
+            Self::MainThreadUnavailable => {
+                write!(f, "main thread unavailable for screen measurement")
+            }
             Self::ScreenUnavailable => write!(f, "main screen unavailable for Dock measurement"),
             Self::DockWindowUnavailable => write!(f, "Dock window unavailable for measurement"),
             Self::SignalHandlerInstall(error) => {
@@ -267,9 +273,11 @@ pub fn delete_tilesize() -> Result<(), SystemDockError> {
 pub fn restart_dock() -> Result<(), SystemDockError> {
     match run_command("killall", &["Dock"]) {
         Ok(_) => Ok(()),
-        Err(SystemDockError::CommandFailed {
-            status, stderr, ..
-        }) if is_missing_dock_process_error(status, &stderr) => Ok(()),
+        Err(SystemDockError::CommandFailed { status, stderr, .. })
+            if is_missing_dock_process_error(status, &stderr) =>
+        {
+            Ok(())
+        }
         Err(error) => Err(error),
     }
 }
@@ -309,7 +317,8 @@ pub fn measured_dock_window_height_for_main_screen() -> Result<i32, SystemDockEr
 }
 
 #[cfg(target_os = "macos")]
-pub fn dock_window_candidates_for_main_screen() -> Result<Vec<DockWindowCandidate>, SystemDockError> {
+pub fn dock_window_candidates_for_main_screen() -> Result<Vec<DockWindowCandidate>, SystemDockError>
+{
     let window_info = copy_window_info(
         CGWindowListOption::OnScreenOnly | CGWindowListOption::ExcludeDesktopElements,
         kCGNullWindowID,
@@ -372,14 +381,13 @@ fn read_optional_tilesize() -> Result<Option<i32>, SystemDockError> {
 
 #[cfg(target_os = "macos")]
 fn run_command(program: &'static str, args: &[&str]) -> Result<String, SystemDockError> {
-    let output = Command::new(program)
-        .args(args)
-        .output()
-        .map_err(|error| SystemDockError::CommandFailed {
+    let output = Command::new(program).args(args).output().map_err(|error| {
+        SystemDockError::CommandFailed {
             program,
             status: None,
             stderr: error.to_string(),
-        })?;
+        }
+    })?;
 
     if output.status.success() {
         return Ok(String::from_utf8_lossy(&output.stdout).into_owned());
@@ -443,7 +451,9 @@ fn dock_window_candidate_from_type(entry: &CFType) -> Option<DockWindowCandidate
 #[cfg(target_os = "macos")]
 fn dictionary_string_value(dictionary: &CFDictionary, key: WindowKeys) -> Option<String> {
     let value = dictionary_value(dictionary, key)?;
-    value.downcast::<CFString>().map(|string| string.to_string())
+    value
+        .downcast::<CFString>()
+        .map(|string| string.to_string())
 }
 
 #[cfg(target_os = "macos")]

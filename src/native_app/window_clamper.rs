@@ -79,10 +79,7 @@ fn intersects_screen(frame: WindowFrame, screen: ScreenFrame) -> bool {
     let screen_right = screen.x + screen.width;
     let screen_top = screen.y + screen.height;
 
-    frame.x < screen_right
-        && frame_right > screen.x
-        && frame.y < screen_top
-        && frame_top > screen.y
+    frame.x < screen_right && frame_right > screen.x && frame.y < screen_top && frame_top > screen.y
 }
 
 #[cfg(target_os = "macos")]
@@ -106,9 +103,10 @@ fn main_screen_allowed_work_area(dock_height: i32) -> Result<WorkingArea, String
     use objc2_app_kit::NSScreen;
     use objc2_foundation::MainThreadMarker;
 
-    let marker =
-        MainThreadMarker::new().ok_or_else(|| "screen measurement requires main thread".to_string())?;
-    let screen = NSScreen::mainScreen(marker).ok_or_else(|| "no main screen available".to_string())?;
+    let marker = MainThreadMarker::new()
+        .ok_or_else(|| "screen measurement requires main thread".to_string())?;
+    let screen =
+        NSScreen::mainScreen(marker).ok_or_else(|| "no main screen available".to_string())?;
     let frame = screen.frame();
     let visible = screen.visibleFrame();
     let bottom_reserved = (visible.origin.y - frame.origin.y).round() as i32;
