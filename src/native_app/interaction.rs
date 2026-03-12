@@ -11,9 +11,10 @@ use objc2_app_kit::{NSControl, NSPanel};
 #[cfg(target_os = "macos")]
 use objc2_foundation::{MainThreadMarker, NSObject, NSTimer};
 
-use crate::native_app::dock_view::build_dock_view;
-use crate::native_app::refresh::load_startup_models;
+use crate::native_app::dock_view::{build_dock_view, required_height};
+use crate::native_app::refresh::{load_startup_models, refresh_models_and_clamp};
 use crate::native_app::view_model::NativeDockItemModel;
+use crate::native_app::window_clamper;
 use crate::services::launcher::{self, LaunchRequest};
 
 pub fn launch_request_from_model(model: &NativeDockItemModel) -> LaunchRequest {
@@ -112,7 +113,9 @@ impl DockController {
     }
 
     fn refresh_from_system(&self) {
-        let models = match load_startup_models() {
+        let models = match refresh_models_and_clamp(load_startup_models, || {
+            window_clamper::clamp_main_screen_windows(required_height() as i32)
+        }) {
             Ok(models) => models,
             Err(error) => {
                 eprintln!("[dors-debug] native refresh failed: {error}");

@@ -5,6 +5,19 @@ use crate::app_state::{self, AppState};
 use crate::config::{ConfigLoad, ConfigStore, DockConfig};
 use crate::native_app::view_model::{NativeDockItemModel, build_models};
 
+pub fn refresh_models_and_clamp<LoadModels, ClampWindows>(
+    load_models: LoadModels,
+    clamp_windows: ClampWindows,
+) -> Result<Vec<NativeDockItemModel>, String>
+where
+    LoadModels: FnOnce() -> Result<Vec<NativeDockItemModel>, String>,
+    ClampWindows: FnOnce() -> Result<(), String>,
+{
+    let models = load_models()?;
+    let _ = clamp_windows();
+    Ok(models)
+}
+
 pub fn build_refresh_models<LoadIcon>(
     state: &AppState,
     running_apps: Vec<crate::domain::RunningApp>,
