@@ -6,4 +6,5 @@ pub mod interaction;
 pub mod layout;
 pub mod panel;
 pub mod refresh;
+pub mod system_dock;
 pub mod view_model;

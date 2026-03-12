@@ -21,7 +21,7 @@ pub struct DockGlassStyle {
 pub fn dock_glass_style() -> DockGlassStyle {
     DockGlassStyle {
         horizontal_padding: 26.0,
-        vertical_origin_y: 40.0,
+        vertical_origin_y: 0.0,
         height: 56.0,
         corner_radius: 28.0,
         container_spacing: 0.0,
@@ -124,5 +124,5 @@ pub fn build_dock_view(
 }
 
 pub fn required_height() -> u32 {
-    (dock_glass_style().vertical_origin_y + dock_glass_style().height).ceil() as u32
+    dock_glass_style().height.ceil() as u32
 }

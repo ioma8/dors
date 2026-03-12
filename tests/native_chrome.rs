@@ -19,12 +19,13 @@ fn dock_glass_style_wraps_the_item_row_inside_panel_height() {
     let style = dock_glass_style();
 
     assert!(style.horizontal_padding >= 16.0);
-    assert!(style.vertical_origin_y >= 0.0);
+    assert_eq!(style.vertical_origin_y, 0.0);
     assert!(style.height >= ITEM_HEIGHT);
     assert!(style.corner_radius >= 24.0);
     assert!(style.container_spacing >= 0.0);
     assert!(style.tint_alpha > 0.0);
     assert!(style.vertical_origin_y + style.height <= required_height() as f64);
+    assert_eq!(required_height(), style.height.ceil() as u32);
 }
 
 #[test]

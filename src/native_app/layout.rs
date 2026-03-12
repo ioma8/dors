@@ -8,12 +8,12 @@ pub fn bottom_center_panel_placement(
     monitor_x: i32,
     monitor_y: i32,
     monitor_width: u32,
-    monitor_height: u32,
+    _monitor_height: u32,
     panel_width: u32,
-    panel_height: u32,
+    _panel_height: u32,
 ) -> PanelPlacement {
     let x = monitor_x + ((monitor_width as i32 - panel_width as i32) / 2);
-    let y = monitor_y + monitor_height as i32 - panel_height as i32;
+    let y = monitor_y;
 
     PanelPlacement { x, y }
 }
