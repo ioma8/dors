@@ -11,8 +11,9 @@ use objc2_app_kit::{NSControl, NSPanel};
 #[cfg(target_os = "macos")]
 use objc2_foundation::{MainThreadMarker, NSObject, NSTimer};
 
+use crate::native_app::clamp_scheduler::ClampScheduler;
 use crate::native_app::dock_view::{build_dock_view, required_height};
-use crate::native_app::refresh::{load_startup_models, refresh_models_and_clamp};
+use crate::native_app::refresh::load_startup_models;
 use crate::native_app::view_model::NativeDockItemModel;
 use crate::native_app::window_clamper;
 use crate::services::launcher::{self, LaunchRequest};
@@ -32,6 +33,7 @@ pub struct DockControllerState {
     models: Vec<NativeDockItemModel>,
     panel_width: u32,
     panel_height: u32,
+    clamp_scheduler: ClampScheduler,
 }
 
 #[cfg(target_os = "macos")]
@@ -88,6 +90,7 @@ impl DockController {
             models,
             panel_width,
             panel_height,
+            clamp_scheduler: ClampScheduler::new(),
         }));
         unsafe { msg_send![super(this), init] }
     }
@@ -113,22 +116,29 @@ impl DockController {
     }
 
     fn refresh_from_system(&self) {
-        let models = match refresh_models_and_clamp(load_startup_models, || {
-            window_clamper::clamp_main_screen_windows(required_height() as i32)
-        }) {
+        let models = match load_startup_models() {
             Ok(models) => models,
             Err(error) => {
                 eprintln!("[dors-debug] native refresh failed: {error}");
                 return;
             }
         };
-        {
+        let clamp_scheduler = {
             let mut state = self.ivars().borrow_mut();
+            let clamp_scheduler = state.clamp_scheduler.clone();
             if state.models == models {
+                drop(state);
+                let _ = clamp_scheduler.try_schedule(|| {
+                    window_clamper::clamp_main_screen_windows(required_height() as i32)
+                });
                 return;
             }
             state.models = models;
-        }
+            clamp_scheduler
+        };
+        let _ = clamp_scheduler.try_schedule(|| {
+            window_clamper::clamp_main_screen_windows(required_height() as i32)
+        });
         if let Err(error) = self.render_current_models() {
             eprintln!("[dors-debug] native render failed: {error}");
         }

@@ -98,6 +98,10 @@ pub fn clamp_main_screen_windows(dock_height: i32) -> Result<(), String> {
     Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
 }
 
+pub fn build_clamp_script_preview(area: WorkingArea) -> String {
+    build_clamp_script(area)
+}
+
 #[cfg(target_os = "macos")]
 fn main_screen_allowed_work_area(dock_height: i32) -> Result<WorkingArea, String> {
     use objc2_app_kit::NSScreen;
@@ -141,17 +145,13 @@ try\n\
 set isStandard to (value of attribute \"AXSubrole\" of win is \"AXStandardWindow\")\n\
 end try\n\
 if isStandard then\n\
-set isResizable to false\n\
-try\n\
-set isResizable to value of attribute \"AXResizable\" of win\n\
-end try\n\
 set isFullScreen to false\n\
 try\n\
 set isFullScreen to value of attribute \"AXFullScreen\" of win\n\
 end try\n\
 set {{xPos, yPos}} to position of win\n\
 set {{winWidth, winHeight}} to size of win\n\
-if isResizable and isFullScreen is false and winWidth >= 240 and winHeight >= 160 and xPos < {screen_right} and (xPos + winWidth) > {screen_left} and yPos < {screen_bottom} and (yPos + winHeight) > {screen_top} then\n\
+if isFullScreen is false and winWidth >= 240 and winHeight >= 160 and xPos < {screen_right} and (xPos + winWidth) > {screen_left} and yPos < {screen_bottom} and (yPos + winHeight) > {screen_top} then\n\
 set newHeight to winHeight\n\
 if newHeight > {area_height} then set newHeight to {area_height}\n\
 set newY to yPos\n\

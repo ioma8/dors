@@ -1,6 +1,6 @@
 use dors::native_app::window_clamper::{
     ScreenFrame, WindowCandidate, WindowFrame, WorkingArea, build_allowed_work_area,
-    clamp_window_frame, should_clamp_candidate,
+    build_clamp_script_preview, clamp_window_frame, should_clamp_candidate,
 };
 
 #[test]
@@ -172,4 +172,17 @@ fn should_clamp_candidate_rejects_fullscreen_or_non_resizable_or_tiny_windows() 
     assert!(!should_clamp_candidate(&fullscreen, screen));
     assert!(!should_clamp_candidate(&fixed, screen));
     assert!(!should_clamp_candidate(&tiny, screen));
+}
+
+#[test]
+fn clamp_script_does_not_skip_windows_based_on_axresizable_attribute() {
+    let script = build_clamp_script_preview(WorkingArea {
+        x: 0,
+        y: 31,
+        width: 1920,
+        height: 966,
+    });
+
+    assert!(!script.contains("AXResizable"));
+    assert!(!script.contains("isResizable"));
 }

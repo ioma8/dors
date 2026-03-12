@@ -1,5 +1,6 @@
 pub mod app;
 pub mod app_delegate;
+pub mod clamp_scheduler;
 pub mod dock_item_view;
 pub mod dock_view;
 pub mod interaction;
