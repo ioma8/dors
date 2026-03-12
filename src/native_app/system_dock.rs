@@ -27,23 +27,15 @@ pub struct DockPreferencesSnapshot {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DockPreferencePlan {
     snapshot: DockPreferencesSnapshot,
-    target_tilesize: i32,
 }
 
 impl DockPreferencePlan {
-    pub fn from_snapshot(snapshot: DockPreferencesSnapshot, target_tilesize: i32) -> Self {
-        Self {
-            snapshot,
-            target_tilesize,
-        }
+    pub fn from_snapshot(snapshot: DockPreferencesSnapshot) -> Self {
+        Self { snapshot }
     }
 
     pub fn target_autohide(self) -> bool {
-        false
-    }
-
-    pub fn target_tilesize(self) -> i32 {
-        self.target_tilesize
+        true
     }
 
     pub fn restore_autohide(self) -> Option<bool> {
@@ -51,7 +43,7 @@ impl DockPreferencePlan {
     }
 
     pub fn restore_tilesize(self) -> Option<Option<i32>> {
-        (self.snapshot.tilesize_before != Some(self.target_tilesize)).then_some(self.snapshot.tilesize_before)
+        None
     }
 }
 
@@ -208,14 +200,12 @@ impl std::error::Error for SystemDockError {}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DockPreferencesGuard {
     restore_autohide: Option<bool>,
-    restore_tilesize: Option<Option<i32>>,
 }
 
 impl DockPreferencesGuard {
     pub fn noop() -> Self {
         Self {
             restore_autohide: None,
-            restore_tilesize: None,
         }
     }
 
@@ -223,13 +213,7 @@ impl DockPreferencesGuard {
         if let Some(restore_autohide) = self.restore_autohide {
             set_autohide(restore_autohide)?;
         }
-        if let Some(restore_tilesize) = self.restore_tilesize {
-            match restore_tilesize {
-                Some(value) => set_tilesize(value)?,
-                None => delete_tilesize()?,
-            }
-        }
-        if self.restore_autohide.is_some() || self.restore_tilesize.is_some() {
+        if self.restore_autohide.is_some() {
             restart_dock()?;
         }
 
@@ -292,19 +276,16 @@ pub fn restart_dock() -> Result<(), SystemDockError> {
 
 #[cfg(target_os = "macos")]
 pub fn prepare_overlay_dock_mode(
-    target_tilesize: i32,
+    _target_dock_height: i32,
 ) -> Result<DockPreferencesGuard, SystemDockError> {
     let snapshot = read_preferences_snapshot()?;
-    let target_tilesize = tilesize_for_desired_real_height(target_tilesize);
-    let plan = DockPreferencePlan::from_snapshot(snapshot, target_tilesize);
+    let plan = DockPreferencePlan::from_snapshot(snapshot);
 
     set_autohide(plan.target_autohide())?;
-    set_tilesize(plan.target_tilesize())?;
     restart_dock()?;
 
     Ok(DockPreferencesGuard {
         restore_autohide: plan.restore_autohide(),
-        restore_tilesize: plan.restore_tilesize(),
     })
 }
 

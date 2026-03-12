@@ -5,45 +5,34 @@ use dors::native_app::system_dock::{
 };
 
 #[test]
-fn dock_preference_plan_restores_only_changed_values() {
-    let changed = DockPreferencePlan::from_snapshot(
-        DockPreferencesSnapshot {
-            autohide_before: true,
-            tilesize_before: Some(64),
-        },
-        56,
-    );
-    let unchanged = DockPreferencePlan::from_snapshot(
-        DockPreferencesSnapshot {
-            autohide_before: false,
-            tilesize_before: Some(56),
-        },
-        56,
-    );
+fn dock_preference_plan_targets_autohide_only() {
+    let changed = DockPreferencePlan::from_snapshot(DockPreferencesSnapshot {
+        autohide_before: false,
+        tilesize_before: Some(64),
+    });
+    let unchanged = DockPreferencePlan::from_snapshot(DockPreferencesSnapshot {
+        autohide_before: true,
+        tilesize_before: Some(56),
+    });
 
-    assert!(!changed.target_autohide());
-    assert_eq!(changed.target_tilesize(), 56);
-    assert_eq!(changed.restore_autohide(), Some(true));
-    assert_eq!(changed.restore_tilesize(), Some(Some(64)));
+    assert!(changed.target_autohide());
+    assert_eq!(changed.restore_autohide(), Some(false));
+    assert_eq!(changed.restore_tilesize(), None);
 
-    assert!(!unchanged.target_autohide());
-    assert_eq!(unchanged.target_tilesize(), 56);
+    assert!(unchanged.target_autohide());
     assert_eq!(unchanged.restore_autohide(), None);
     assert_eq!(unchanged.restore_tilesize(), None);
 }
 
 #[test]
-fn dock_preference_plan_restores_deleted_tilesize_when_missing_before() {
-    let plan = DockPreferencePlan::from_snapshot(
-        DockPreferencesSnapshot {
-            autohide_before: false,
-            tilesize_before: None,
-        },
-        56,
-    );
+fn dock_preference_plan_never_restores_tilesize() {
+    let plan = DockPreferencePlan::from_snapshot(DockPreferencesSnapshot {
+        autohide_before: false,
+        tilesize_before: None,
+    });
 
-    assert_eq!(plan.restore_autohide(), None);
-    assert_eq!(plan.restore_tilesize(), Some(None));
+    assert_eq!(plan.restore_autohide(), Some(false));
+    assert_eq!(plan.restore_tilesize(), None);
 }
 
 #[test]
@@ -81,23 +70,29 @@ fn dock_window_selector_prefers_the_real_bottom_dock_window() {
     let windows = vec![
         DockWindowCandidate {
             owner_name: "Dock".to_string(),
+            window_name: None,
             layer: 20,
             width: 300.0,
             height: 40.0,
+            x: 0.0,
             y: 1000.0,
         },
         DockWindowCandidate {
             owner_name: "Dock".to_string(),
+            window_name: None,
             layer: 20,
             width: 1200.0,
             height: 83.0,
+            x: 0.0,
             y: 0.0,
         },
         DockWindowCandidate {
             owner_name: "Finder".to_string(),
+            window_name: None,
             layer: 20,
             width: 1400.0,
             height: 90.0,
+            x: 0.0,
             y: 0.0,
         },
     ];
