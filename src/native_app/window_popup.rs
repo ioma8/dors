@@ -3,13 +3,37 @@ use std::cell::RefCell;
 
 use crate::native_app::window_menu::HoveredWindow;
 
-pub const WINDOW_POPUP_ITEM_HEIGHT: f64 = 26.0;
-pub const WINDOW_POPUP_WIDTH: f64 = 320.0;
-pub const WINDOW_POPUP_HORIZONTAL_PADDING: f64 = 10.0;
-pub const WINDOW_POPUP_VERTICAL_PADDING: f64 = 10.0;
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PopupStyle {
+    pub width: f64,
+    pub horizontal_padding: f64,
+    pub vertical_padding: f64,
+    pub row_height: f64,
+    pub row_spacing: f64,
+    pub corner_radius: f64,
+}
+
+pub fn popup_style() -> PopupStyle {
+    PopupStyle {
+        width: 324.0,
+        horizontal_padding: 14.0,
+        vertical_padding: 14.0,
+        row_height: 34.0,
+        row_spacing: 6.0,
+        corner_radius: 20.0,
+    }
+}
+
+pub const WINDOW_POPUP_ITEM_HEIGHT: f64 = 34.0;
+pub const WINDOW_POPUP_WIDTH: f64 = 324.0;
+pub const WINDOW_POPUP_HORIZONTAL_PADDING: f64 = 14.0;
+pub const WINDOW_POPUP_VERTICAL_PADDING: f64 = 14.0;
+pub const WINDOW_POPUP_ROW_SPACING: f64 = 6.0;
 
 pub fn popup_height(item_count: usize) -> f64 {
-    WINDOW_POPUP_VERTICAL_PADDING * 2.0 + WINDOW_POPUP_ITEM_HEIGHT * item_count as f64
+    let rows_height = WINDOW_POPUP_ITEM_HEIGHT * item_count as f64;
+    let row_spacing = WINDOW_POPUP_ROW_SPACING * item_count.saturating_sub(1) as f64;
+    WINDOW_POPUP_VERTICAL_PADDING * 2.0 + rows_height + row_spacing
 }
 
 #[cfg(target_os = "macos")]
@@ -62,13 +86,17 @@ pub fn build_window_popover(
 ) -> Result<objc2::rc::Retained<objc2_app_kit::NSPopover>, String> {
     use objc2::{AnyThread, MainThreadOnly};
     use objc2_app_kit::{
-        NSButton, NSPopover, NSTrackingArea, NSTrackingAreaOptions, NSView, NSViewController,
+        NSBox, NSBoxType, NSButton, NSButtonType, NSColor, NSFont, NSPopover, NSTextAlignment,
+        NSTextField, NSTrackingArea, NSTrackingAreaOptions, NSView, NSViewController,
+        NSVisualEffectBlendingMode, NSVisualEffectMaterial, NSVisualEffectState,
+        NSVisualEffectView,
     };
     use objc2_foundation::{MainThreadMarker, NSPoint, NSRect, NSSize, NSString};
 
     let marker = MainThreadMarker::new()
         .ok_or_else(|| "popover creation must run on the main thread".to_string())?;
     let content_height = popup_height(windows.len());
+    let style = popup_style();
     let content_view: objc2::rc::Retained<PopupTrackingView> = unsafe {
         msg_send![
             super(
@@ -97,21 +125,79 @@ pub fn build_window_popover(
         Retained::cast_unchecked(content_view)
     };
 
+    let glass = NSVisualEffectView::initWithFrame(
+        NSVisualEffectView::alloc(marker),
+        NSRect::new(
+            NSPoint::new(0.0, 0.0),
+            NSSize::new(WINDOW_POPUP_WIDTH, content_height),
+        ),
+    );
+    glass.setMaterial(NSVisualEffectMaterial::HUDWindow);
+    glass.setBlendingMode(NSVisualEffectBlendingMode::BehindWindow);
+    glass.setState(NSVisualEffectState::Active);
+    content_view.addSubview(&glass);
+
+    let frame_box = NSBox::initWithFrame(
+        NSBox::alloc(marker),
+        NSRect::new(
+            NSPoint::new(0.0, 0.0),
+            NSSize::new(WINDOW_POPUP_WIDTH, content_height),
+        ),
+    );
+    frame_box.setBoxType(NSBoxType::Custom);
+    frame_box.setTransparent(false);
+    frame_box.setCornerRadius(style.corner_radius);
+    frame_box.setBorderWidth(1.0);
+    frame_box.setBorderColor(&NSColor::colorWithWhite_alpha(1.0, 0.12));
+    frame_box.setFillColor(&NSColor::colorWithWhite_alpha(0.06, 0.38));
+    content_view.addSubview(&frame_box);
+
     for window in windows {
         let y = content_height
             - WINDOW_POPUP_VERTICAL_PADDING
-            - WINDOW_POPUP_ITEM_HEIGHT * (window.index as f64 + 1.0);
+            - WINDOW_POPUP_ITEM_HEIGHT * (window.index as f64 + 1.0)
+            - WINDOW_POPUP_ROW_SPACING * window.index as f64;
+        let row_width = WINDOW_POPUP_WIDTH - WINDOW_POPUP_HORIZONTAL_PADDING * 2.0;
+
+        let row = NSBox::initWithFrame(
+            NSBox::alloc(marker),
+            NSRect::new(
+                NSPoint::new(WINDOW_POPUP_HORIZONTAL_PADDING, y),
+                NSSize::new(row_width, WINDOW_POPUP_ITEM_HEIGHT),
+            ),
+        );
+        row.setBoxType(NSBoxType::Custom);
+        row.setTransparent(false);
+        row.setCornerRadius(11.0);
+        row.setBorderWidth(1.0);
+        row.setBorderColor(&NSColor::colorWithWhite_alpha(1.0, 0.08));
+        row.setFillColor(&NSColor::colorWithWhite_alpha(1.0, 0.10));
+        content_view.addSubview(&row);
+
+        let label = NSTextField::labelWithString(&NSString::from_str(&window.title), marker);
+        label.setFrame(NSRect::new(
+            NSPoint::new(WINDOW_POPUP_HORIZONTAL_PADDING + 14.0, y + 6.0),
+            NSSize::new(row_width - 28.0, WINDOW_POPUP_ITEM_HEIGHT - 12.0),
+        ));
+        label.setAlignment(NSTextAlignment::Left);
+        label.setTextColor(Some(&NSColor::colorWithWhite_alpha(1.0, 0.92)));
+        label.setFont(Some(&NSFont::systemFontOfSize(16.0)));
+        content_view.addSubview(&label);
+
         let button = NSButton::initWithFrame(
             NSButton::alloc(marker),
             NSRect::new(
                 NSPoint::new(WINDOW_POPUP_HORIZONTAL_PADDING, y),
                 NSSize::new(
-                    WINDOW_POPUP_WIDTH - WINDOW_POPUP_HORIZONTAL_PADDING * 2.0,
+                    row_width,
                     WINDOW_POPUP_ITEM_HEIGHT,
                 ),
             ),
         );
-        button.setTitle(&NSString::from_str(&window.title));
+        button.setButtonType(NSButtonType::MomentaryChange);
+        button.setBordered(false);
+        button.setTransparent(true);
+        button.setTitle(&NSString::from_str(""));
         button.setTag(window.index as isize);
         unsafe {
             button.setTarget(Some(target));
