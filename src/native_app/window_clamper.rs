@@ -255,21 +255,34 @@ impl CustomZoomTracker {
         }
 
         if is_custom_zoomed {
+            if let Some(restore_frame) = self.last_regular_frames.get(key).copied() {
+                if restore_frame != candidate.frame {
+                    self.states.insert(
+                        key.clone(),
+                        CustomZoomState {
+                            restore_frame,
+                            settling_observations_remaining: 4,
+                        },
+                    );
+                }
+            }
             self.remember_frame(candidate);
             return None;
         }
 
-        if let Some(restore_frame) = self.last_regular_frames.get(key).copied() {
-            self.states.insert(
-                key.clone(),
-                CustomZoomState {
-                    restore_frame,
-                    settling_observations_remaining: 4,
-                },
-            );
-        } else {
-            self.states.remove(key);
-        }
+        let restore_frame = self
+            .last_regular_frames
+            .get(key)
+            .copied()
+            .unwrap_or(candidate.frame);
+        self.last_regular_frames.insert(key.clone(), restore_frame);
+        self.states.insert(
+            key.clone(),
+            CustomZoomState {
+                restore_frame,
+                settling_observations_remaining: 4,
+            },
+        );
 
         self.remember_frame(candidate);
         Some(ClampOperation::ResizeToArea(custom_area))
@@ -637,10 +650,12 @@ pub fn clamp_ax_window_with_managed_zoom(
     };
 
     if !should_clamp_candidate(&observed_window.candidate, screen) {
-        eprintln!(
-            "[dors-debug] managed zoom skip key={} reason=not-clamp-candidate",
-            observed_window.candidate.stable_key
-        );
+        if debug_logging_enabled() {
+            eprintln!(
+                "[dors-debug] managed zoom skip key={} reason=not-clamp-candidate",
+                observed_window.candidate.stable_key
+            );
+        }
         return Ok(true);
     }
 

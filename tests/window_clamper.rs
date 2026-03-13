@@ -822,7 +822,7 @@ fn startup_initialization_reclamps_native_zoom_without_unknown_restore_frame() {
     );
     assert_eq!(
         tracker.plan_operation(&native_zoomed, native_area, custom_area),
-        Some(ClampOperation::ResizeToArea(custom_area))
+        Some(ClampOperation::Restore(native_zoomed.frame))
     );
 }
 
@@ -872,6 +872,68 @@ fn startup_initialization_does_not_seed_custom_zoomed_window_as_regular() {
     assert_eq!(
         tracker.plan_operation(&native_zoomed, native_area, custom_area),
         Some(ClampOperation::ResizeToArea(custom_area))
+    );
+}
+
+#[test]
+fn startup_initialization_preserves_restore_frame_for_reclamped_window() {
+    let native_area = WorkingArea {
+        x: 0,
+        y: 31,
+        width: 1920,
+        height: 1049,
+    };
+    let custom_area = WorkingArea {
+        x: 0,
+        y: 31,
+        width: 1920,
+        height: 993,
+    };
+    let mut tracker = CustomZoomTracker::default();
+    let legacy_maximized = WindowCandidate {
+        owner_name: "firefox".to_string(),
+        stable_key: "pid-1767::window-1".to_string(),
+        frame: WindowFrame {
+            x: 0,
+            y: 31,
+            width: 1920,
+            height: 893,
+        },
+        is_standard: true,
+        is_resizable: true,
+        is_fullscreen: false,
+        is_visible: true,
+    };
+    let custom_zoomed = WindowCandidate {
+        frame: WindowFrame {
+            x: 0,
+            y: 31,
+            width: 1920,
+            height: 993,
+        },
+        ..legacy_maximized.clone()
+    };
+    let native_zoomed = WindowCandidate {
+        frame: WindowFrame {
+            x: 0,
+            y: 31,
+            width: 1920,
+            height: 1049,
+        },
+        ..legacy_maximized.clone()
+    };
+
+    assert_eq!(
+        tracker.plan_startup_operation(&legacy_maximized, native_area, custom_area),
+        Some(ClampOperation::ResizeToArea(custom_area))
+    );
+    assert_eq!(
+        tracker.plan_operation(&custom_zoomed, native_area, custom_area),
+        None
+    );
+    assert_eq!(
+        tracker.plan_operation(&native_zoomed, native_area, custom_area),
+        Some(ClampOperation::Restore(legacy_maximized.frame))
     );
 }
 

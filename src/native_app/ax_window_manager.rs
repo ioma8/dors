@@ -323,15 +323,19 @@ extern "C" fn ax_observer_callback(
     if crate::native_app::window_clamper::debug_logging_enabled() {
         eprintln!("[dors-debug] ax event notification={notification_name}");
     }
-    if normalize_notification_name(&notification_name).is_none() {
+    let Some(kind) = normalize_notification_name(&notification_name) else {
+        return;
+    };
+    if !matches!(kind, WindowEventKind::Resized | WindowEventKind::Moved) {
         return;
     }
     let clamp_scheduler = context.clamp_scheduler.clone();
     let pid = context.pid;
     let native_area = context.native_area;
     let custom_area = context.custom_area;
-    let normalized = normalize_notification_name(&notification_name);
-    let retained_element = if normalized == Some(WindowEventKind::Resized) && !element.is_null() {
+    let retained_element = if matches!(kind, WindowEventKind::Resized | WindowEventKind::Moved)
+        && !element.is_null()
+    {
         unsafe {
             CFRetain(element.cast());
         }
