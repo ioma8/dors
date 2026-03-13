@@ -38,6 +38,15 @@ define_class!(
                 let _: () = unsafe { msg_send![&*target, hoverExitedDockItem: self] };
             }
         }
+
+        #[unsafe(method(rightMouseDown:))]
+        fn right_mouse_down(&self, event: &objc2_app_kit::NSEvent) {
+            if let Some(target) = self.target() {
+                let _: () = unsafe {
+                    msg_send![&*target, showContextMenuForDockItem: self, event: event]
+                };
+            }
+        }
     }
 );
 

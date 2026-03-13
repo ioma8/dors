@@ -10,10 +10,14 @@ use objc2::Message;
 #[cfg(target_os = "macos")]
 use objc2::{DefinedClass, MainThreadOnly, define_class, msg_send, sel};
 #[cfg(target_os = "macos")]
-use objc2_app_kit::{NSControl, NSPanel, NSPopover};
+use objc2_app_kit::{NSControl, NSEvent, NSMenu, NSMenuItem, NSPanel, NSPopover};
 #[cfg(target_os = "macos")]
-use objc2_foundation::{MainThreadMarker, NSObject, NSRectEdge, NSTimer};
+use objc2_foundation::{MainThreadMarker, NSObject, NSRectEdge, NSTimer, NSString};
 
+use crate::native_app::app_context_menu::{
+    AppContextAction, action_from_tag, context_action_tag, context_action_title,
+    perform_context_action, running_application_pid,
+};
 use crate::native_app::clamp_scheduler::ClampScheduler;
 use crate::native_app::dock_view::{build_dock_view, required_height};
 use crate::native_app::refresh::load_startup_models;
@@ -68,6 +72,7 @@ pub struct DockControllerState {
     hover_menu_context: Option<HoverMenuContext>,
     hover_popover: Option<Retained<NSPopover>>,
     hovering_popover: bool,
+    context_menu_item_index: Option<usize>,
 }
 
 #[cfg(target_os = "macos")]
@@ -232,6 +237,79 @@ define_class!(
             state.hover_menu_context = None;
             state.hover_dismiss_deadline = None;
         }
+
+        #[unsafe(method(showContextMenuForDockItem:event:))]
+        fn show_context_menu_for_dock_item(
+            &self,
+            sender: Option<&AnyObject>,
+            event: Option<&NSEvent>,
+        ) {
+            let Some(control) = sender.and_then(|value| value.downcast_ref::<NSControl>()) else {
+                return;
+            };
+            let Some(event) = event else {
+                return;
+            };
+            let Ok(index) = usize::try_from(control.tag()) else {
+                return;
+            };
+
+            {
+                let mut state = self.ivars().borrow_mut();
+                state.context_menu_item_index = Some(index);
+            }
+
+            let Some(marker) = MainThreadMarker::new() else {
+                return;
+            };
+            let menu = NSMenu::initWithTitle(NSMenu::alloc(marker), &NSString::from_str(""));
+            for action in [
+                AppContextAction::Kill,
+                AppContextAction::ForceKill,
+                AppContextAction::CopyPid,
+            ] {
+                let item = unsafe {
+                    NSMenuItem::initWithTitle_action_keyEquivalent(
+                        NSMenuItem::alloc(marker),
+                        &NSString::from_str(context_action_title(action)),
+                        Some(sel!(performDockItemContextAction:)),
+                        &NSString::from_str(""),
+                    )
+                };
+                item.setTag(context_action_tag(action));
+                unsafe {
+                    item.setTarget(Some(self));
+                }
+                menu.addItem(&item);
+            }
+
+            NSMenu::popUpContextMenu_withEvent_forView(&menu, event, control);
+        }
+
+        #[unsafe(method(performDockItemContextAction:))]
+        fn perform_dock_item_context_action(&self, sender: Option<&AnyObject>) {
+            let Some(menu_item) = sender.and_then(|value| value.downcast_ref::<NSMenuItem>()) else {
+                return;
+            };
+            let Some(action) = action_from_tag(menu_item.tag()) else {
+                return;
+            };
+            let model = {
+                let state = self.ivars().borrow();
+                let Some(index) = state.context_menu_item_index else {
+                    return;
+                };
+                state.models.get(index).cloned()
+            };
+            let Some(model) = model else {
+                return;
+            };
+            let Some(pid) = running_application_pid(model.bundle_id.as_deref(), &model.path) else {
+                return;
+            };
+            let _ = perform_context_action(action, pid);
+            self.refresh_from_system();
+        }
     }
 );
 
@@ -259,6 +337,7 @@ impl DockController {
             hover_menu_context: None,
             hover_popover: None,
             hovering_popover: false,
+            context_menu_item_index: None,
         }));
         unsafe { msg_send![super(this), init] }
     }
