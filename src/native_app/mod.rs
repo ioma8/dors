@@ -1,3 +1,4 @@
+pub mod accessibility;
 pub mod ax_window_manager;
 pub mod app;
 pub mod app_delegate;

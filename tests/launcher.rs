@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
 use dors::services::launcher::{
-    LaunchAction, LaunchRequest, LaunchResult, activation_script, launch_or_activate,
+    FrontmostApp, LaunchAction, LaunchRequest, LaunchResult, activation_script, launch_or_activate,
+    select_authoritative_frontmost,
 };
 
 #[test]
@@ -90,5 +91,56 @@ fn running_app_activation_script_reopens_the_app_window() {
 tell application id \"com.apple.Safari\" to reopen"
                 .to_string()
         )
+    );
+}
+
+#[test]
+fn authoritative_frontmost_prefers_expected_bundle_when_it_appears() {
+    let before = Some(FrontmostApp {
+        bundle_id: Some("com.apple.Safari".to_string()),
+        name: Some("Safari".to_string()),
+    });
+    let expected_bundle = Some("com.apple.Mail");
+    let samples = vec![
+        Some(FrontmostApp {
+            bundle_id: Some("com.apple.Safari".to_string()),
+            name: Some("Safari".to_string()),
+        }),
+        Some(FrontmostApp {
+            bundle_id: Some("com.apple.Mail".to_string()),
+            name: Some("Mail".to_string()),
+        }),
+    ];
+
+    assert_eq!(
+        select_authoritative_frontmost(before.as_ref(), expected_bundle, &samples),
+        samples.last().cloned().flatten()
+    );
+}
+
+#[test]
+fn authoritative_frontmost_keeps_last_sample_when_expected_bundle_never_appears() {
+    let before = Some(FrontmostApp {
+        bundle_id: Some("com.apple.Safari".to_string()),
+        name: Some("Safari".to_string()),
+    });
+    let expected_bundle = Some("com.apple.Mail");
+    let samples = vec![
+        Some(FrontmostApp {
+            bundle_id: Some("com.apple.Safari".to_string()),
+            name: Some("Safari".to_string()),
+        }),
+        Some(FrontmostApp {
+            bundle_id: Some("com.apple.Finder".to_string()),
+            name: Some("Finder".to_string()),
+        }),
+    ];
+
+    assert_eq!(
+        select_authoritative_frontmost(before.as_ref(), expected_bundle, &samples),
+        Some(FrontmostApp {
+            bundle_id: Some("com.apple.Finder".to_string()),
+            name: Some("Finder".to_string()),
+        })
     );
 }

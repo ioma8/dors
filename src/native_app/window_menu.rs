@@ -108,25 +108,19 @@ pub fn read_windows_for_app(
     bundle_id: Option<&str>,
     fallback_process_name: &str,
 ) -> Result<Vec<HoveredWindow>, String> {
-    let process_name = resolve_process_name(bundle_id, fallback_process_name)?;
-    let script = format!(
-        "tell application \"System Events\"\n\
-tell application process \"{process_name}\"\n\
-set windowNames to name of every window\n\
-end tell\n\
-end tell\n\
-set AppleScript's text item delimiters to linefeed\n\
-return windowNames as text"
-    );
-    let output = Command::new("osascript")
-        .args(["-e", &script])
-        .output()
-        .map_err(|error| error.to_string())?;
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    let pid = resolve_process_id(bundle_id, fallback_process_name)?;
+    let windows = crate::native_app::accessibility::copy_windows(pid)?;
+    let mut hovered_windows = Vec::new();
+
+    for (index, window) in windows.iter().enumerate() {
+        let title = crate::native_app::accessibility::copy_string_attribute(window.as_ptr(), "AXTitle")?
+            .unwrap_or_default();
+        if !title.trim().is_empty() {
+            hovered_windows.push(HoveredWindow::new(index, &title));
+        }
     }
 
-    Ok(parse_window_title_lines(&String::from_utf8_lossy(&output.stdout)))
+    Ok(hovered_windows)
 }
 
 #[cfg(target_os = "macos")]
@@ -135,32 +129,58 @@ pub fn activate_specific_window(
     fallback_process_name: &str,
     window_title: &str,
 ) -> Result<(), String> {
-    let process_name = resolve_process_name(bundle_id, fallback_process_name)?;
-    let script = activation_script_for_window(&process_name, window_title);
-    let status = Command::new("osascript")
-        .args(["-e", &script])
-        .status()
-        .map_err(|error| error.to_string())?;
+    use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication, NSWorkspace};
+    use objc2_foundation::NSString;
 
-    if status.success() {
-        return Ok(());
+    let pid = resolve_process_id(bundle_id, fallback_process_name)?;
+    let windows = crate::native_app::accessibility::copy_windows(pid)?;
+    let target_window = windows
+        .iter()
+        .find_map(|window| {
+            let title =
+                crate::native_app::accessibility::copy_string_attribute(window.as_ptr(), "AXTitle").ok()??;
+            (title == window_title).then_some(window.as_ptr())
+        })
+        .ok_or_else(|| "failed to find target window".to_string())?;
+
+    if let Some(bundle_id) = bundle_id {
+        let bundle_id = NSString::from_str(bundle_id);
+        let applications = NSRunningApplication::runningApplicationsWithBundleIdentifier(&bundle_id);
+        if let Some(application) = applications.firstObject() {
+            let _ = application.activateWithOptions(NSApplicationActivationOptions::ActivateAllWindows);
+            if application.isHidden() {
+                let _ = application.unhide();
+            }
+        }
+    } else {
+        let workspace = NSWorkspace::sharedWorkspace();
+        for application in workspace.runningApplications().iter() {
+            if application.processIdentifier() == pid {
+                let _ = application.activateWithOptions(NSApplicationActivationOptions::ActivateAllWindows);
+                if application.isHidden() {
+                    let _ = application.unhide();
+                }
+                break;
+            }
+        }
     }
 
-    Err("failed to activate specific window".to_string())
+    crate::native_app::accessibility::set_bool_attribute(target_window, "AXMain", true)?;
+    crate::native_app::accessibility::set_bool_attribute(target_window, "AXFocused", true)?;
+    crate::native_app::accessibility::perform_action(target_window, "AXRaise")?;
+    Ok(())
 }
 
 #[cfg(target_os = "macos")]
-fn resolve_process_name(bundle_id: Option<&str>, fallback_process_name: &str) -> Result<String, String> {
-    use objc2_app_kit::NSRunningApplication;
+fn resolve_process_id(bundle_id: Option<&str>, fallback_process_name: &str) -> Result<i32, String> {
+    use objc2_app_kit::{NSRunningApplication, NSWorkspace};
     use objc2_foundation::NSString;
 
     if let Some(bundle_id) = bundle_id {
         let bundle_id = NSString::from_str(bundle_id);
         let applications = NSRunningApplication::runningApplicationsWithBundleIdentifier(&bundle_id);
         if let Some(application) = applications.firstObject() {
-            if let Some(name) = application.localizedName() {
-                return Ok(name.to_string());
-            }
+            return Ok(application.processIdentifier());
         }
     }
 
@@ -168,7 +188,16 @@ fn resolve_process_name(bundle_id: Option<&str>, fallback_process_name: &str) ->
         return Err("missing process name".to_string());
     }
 
-    Ok(fallback_process_name.to_string())
+    let workspace = NSWorkspace::sharedWorkspace();
+    for application in workspace.runningApplications().iter() {
+        if application
+            .localizedName()
+            .map(|name| name.to_string() == fallback_process_name)
+            .unwrap_or(false)
+        {
+            return Ok(application.processIdentifier());
+        }
+    }
+
+    Err("missing process id".to_string())
 }
-#[cfg(target_os = "macos")]
-use std::process::Command;
