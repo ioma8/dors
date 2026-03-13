@@ -83,8 +83,7 @@ fn intersects_screen(frame: WindowFrame, screen: ScreenFrame) -> bool {
 }
 
 #[cfg(target_os = "macos")]
-pub fn clamp_main_screen_windows(dock_height: i32) -> Result<(), String> {
-    let area = main_screen_allowed_work_area(dock_height)?;
+pub fn clamp_windows_in_area(area: WorkingArea) -> Result<(), String> {
     let script = build_clamp_script(area);
     let output = Command::new("osascript")
         .args(["-e", &script])
@@ -103,7 +102,7 @@ pub fn build_clamp_script_preview(area: WorkingArea) -> String {
 }
 
 #[cfg(target_os = "macos")]
-fn main_screen_allowed_work_area(dock_height: i32) -> Result<WorkingArea, String> {
+pub fn main_screen_allowed_work_area(dock_height: i32) -> Result<WorkingArea, String> {
     use objc2_app_kit::NSScreen;
     use objc2_foundation::MainThreadMarker;
 

@@ -289,18 +289,26 @@ impl DockController {
         let clamp_scheduler = {
             let mut state = self.ivars().borrow_mut();
             let clamp_scheduler = state.clamp_scheduler.clone();
+            let allowed_area = match window_clamper::main_screen_allowed_work_area(required_height() as i32) {
+                Ok(area) => area,
+                Err(error) => {
+                    eprintln!("[dors-debug] native work area measurement failed: {error}");
+                    return;
+                }
+            };
             if state.models == models {
                 drop(state);
-                let _ = clamp_scheduler.try_schedule(|| {
-                    window_clamper::clamp_main_screen_windows(required_height() as i32)
+                let _ = clamp_scheduler.try_schedule(move || {
+                    window_clamper::clamp_windows_in_area(allowed_area)
                 });
                 return;
             }
             state.models = models;
-            clamp_scheduler
+            (clamp_scheduler, allowed_area)
         };
-        let _ = clamp_scheduler.try_schedule(|| {
-            window_clamper::clamp_main_screen_windows(required_height() as i32)
+        let (clamp_scheduler, allowed_area) = clamp_scheduler;
+        let _ = clamp_scheduler.try_schedule(move || {
+            window_clamper::clamp_windows_in_area(allowed_area)
         });
         if let Err(error) = self.render_current_models() {
             eprintln!("[dors-debug] native render failed: {error}");
