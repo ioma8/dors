@@ -263,10 +263,12 @@ impl AxFrontmostObserver {
             if add_error == AX_ERROR_SUCCESS {
                 any_notification_registered = true;
             } else {
-                eprintln!(
-                    "[dors-debug] ax observer notification registration failed pid={} notification={} error={}",
-                    pid, notification_name, add_error
-                );
+                if crate::native_app::window_clamper::debug_logging_enabled() {
+                    eprintln!(
+                        "[dors-debug] ax observer notification registration failed pid={} notification={} error={}",
+                        pid, notification_name, add_error
+                    );
+                }
             }
         }
 
@@ -318,7 +320,9 @@ extern "C" fn ax_observer_callback(
         return;
     };
     let notification_name = unsafe { CFString::wrap_under_get_rule(notification) }.to_string();
-    eprintln!("[dors-debug] ax event notification={notification_name}");
+    if crate::native_app::window_clamper::debug_logging_enabled() {
+        eprintln!("[dors-debug] ax event notification={notification_name}");
+    }
     if normalize_notification_name(&notification_name).is_none() {
         return;
     }

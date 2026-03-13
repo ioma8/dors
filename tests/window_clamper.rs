@@ -562,6 +562,106 @@ fn custom_zoom_tracker_rehydrates_state_for_existing_custom_zoomed_window() {
 }
 
 #[test]
+fn custom_zoom_tracker_skips_duplicate_frame_checks() {
+    let native_area = WorkingArea {
+        x: 0,
+        y: 31,
+        width: 1920,
+        height: 1049,
+    };
+    let custom_area = WorkingArea {
+        x: 0,
+        y: 31,
+        width: 1920,
+        height: 993,
+    };
+    let mut tracker = CustomZoomTracker::default();
+    let regular = WindowCandidate {
+        owner_name: "Code".to_string(),
+        stable_key: "pid-123::window-1".to_string(),
+        frame: WindowFrame {
+            x: 120,
+            y: 80,
+            width: 1200,
+            height: 800,
+        },
+        is_standard: true,
+        is_resizable: true,
+        is_fullscreen: false,
+        is_visible: true,
+    };
+
+    assert!(!tracker.should_skip_frame(&regular));
+    assert_eq!(tracker.plan_operation(&regular, native_area, custom_area), None);
+    assert!(tracker.should_skip_frame(&regular));
+}
+
+#[test]
+fn custom_zoom_tracker_fast_noops_when_custom_frame_is_already_managed() {
+    let native_area = WorkingArea {
+        x: 0,
+        y: 31,
+        width: 1920,
+        height: 1049,
+    };
+    let custom_area = WorkingArea {
+        x: 0,
+        y: 31,
+        width: 1920,
+        height: 993,
+    };
+    let mut tracker = CustomZoomTracker::default();
+    let regular = WindowCandidate {
+        owner_name: "Code".to_string(),
+        stable_key: "pid-123::window-1".to_string(),
+        frame: WindowFrame {
+            x: 120,
+            y: 80,
+            width: 1200,
+            height: 800,
+        },
+        is_standard: true,
+        is_resizable: true,
+        is_fullscreen: false,
+        is_visible: true,
+    };
+    let native_zoomed = WindowCandidate {
+        frame: WindowFrame {
+            x: 0,
+            y: 31,
+            width: 1920,
+            height: 1049,
+        },
+        ..regular.clone()
+    };
+    let custom_zoomed = WindowCandidate {
+        frame: WindowFrame {
+            x: 0,
+            y: 31,
+            width: 1920,
+            height: 993,
+        },
+        ..regular.clone()
+    };
+
+    assert_eq!(tracker.plan_operation(&regular, native_area, custom_area), None);
+    assert_eq!(
+        tracker.plan_operation(&native_zoomed, native_area, custom_area),
+        Some(ClampOperation::ResizeToArea(custom_area))
+    );
+    assert_eq!(tracker.plan_operation(&custom_zoomed, native_area, custom_area), None);
+    assert_eq!(
+        tracker.plan_operation(&native_zoomed, native_area, custom_area),
+        Some(ClampOperation::Restore(WindowFrame {
+            x: 120,
+            y: 80,
+            width: 1200,
+            height: 800,
+        }))
+    );
+}
+
+#[test]
 fn managed_zoom_reducer_handles_passive_and_active_signals() {
     let native_area = WorkingArea {
         x: 0,

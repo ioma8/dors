@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::env;
 #[cfg(target_os = "macos")]
 use std::sync::{Mutex, OnceLock};
 
@@ -85,6 +86,25 @@ pub struct CustomZoomState {
 pub struct CustomZoomTracker {
     states: HashMap<String, CustomZoomState>,
     last_regular_frames: HashMap<String, WindowFrame>,
+    last_seen_frames: HashMap<String, WindowFrame>,
+}
+
+pub fn debug_logging_enabled() -> bool {
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    #[cfg(target_os = "macos")]
+    {
+        *ENABLED.get_or_init(|| {
+            env::var("DORS_DEBUG_WINDOWS")
+                .ok()
+                .or_else(|| env::var("DORS_DEBUG").ok())
+                .map(|value| value != "0")
+                .unwrap_or(false)
+        })
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        false
+    }
 }
 
 pub fn build_allowed_work_area(
@@ -206,6 +226,15 @@ pub fn normalize_ax_value(value: &str) -> &str {
 }
 
 impl CustomZoomTracker {
+    pub fn should_skip_frame(&self, candidate: &WindowCandidate) -> bool {
+        self.last_seen_frames.get(&candidate.stable_key) == Some(&candidate.frame)
+    }
+
+    fn remember_frame(&mut self, candidate: &WindowCandidate) {
+        self.last_seen_frames
+            .insert(candidate.stable_key.clone(), candidate.frame);
+    }
+
     pub fn plan_startup_operation(
         &mut self,
         candidate: &WindowCandidate,
@@ -221,10 +250,12 @@ impl CustomZoomTracker {
 
         if !is_startup_maximized {
             self.last_regular_frames.insert(key.clone(), candidate.frame);
+            self.remember_frame(candidate);
             return None;
         }
 
         if is_custom_zoomed {
+            self.remember_frame(candidate);
             return None;
         }
 
@@ -240,6 +271,7 @@ impl CustomZoomTracker {
             self.states.remove(key);
         }
 
+        self.remember_frame(candidate);
         Some(ClampOperation::ResizeToArea(custom_area))
     }
 
@@ -272,37 +304,45 @@ impl CustomZoomTracker {
         if !is_native_zoomed && !is_custom_zoomed {
             if let Some(state) = self.states.get_mut(key) {
                 if state.settling_observations_remaining > 0 {
+                    if debug_logging_enabled() {
+                        eprintln!(
+                            "[dors-debug] managed zoom observe key={} state=settling remaining={} frame=({}, {}, {}, {})",
+                            key,
+                            state.settling_observations_remaining,
+                            candidate.frame.x,
+                            candidate.frame.y,
+                            candidate.frame.width,
+                            candidate.frame.height
+                        );
+                    }
+                    state.settling_observations_remaining -= 1;
+                    self.remember_frame(candidate);
+                    return;
+                }
+                if debug_logging_enabled() {
                     eprintln!(
-                        "[dors-debug] managed zoom observe key={} state=settling remaining={} frame=({}, {}, {}, {})",
+                        "[dors-debug] managed zoom observe key={} state=clear-managed frame=({}, {}, {}, {})",
                         key,
-                        state.settling_observations_remaining,
                         candidate.frame.x,
                         candidate.frame.y,
                         candidate.frame.width,
                         candidate.frame.height
                     );
-                    state.settling_observations_remaining -= 1;
-                    return;
                 }
+                self.states.remove(key);
+            }
+            if debug_logging_enabled() {
                 eprintln!(
-                    "[dors-debug] managed zoom observe key={} state=clear-managed frame=({}, {}, {}, {})",
+                    "[dors-debug] managed zoom observe key={} state=record-regular frame=({}, {}, {}, {})",
                     key,
                     candidate.frame.x,
                     candidate.frame.y,
                     candidate.frame.width,
                     candidate.frame.height
                 );
-                self.states.remove(key);
             }
-            eprintln!(
-                "[dors-debug] managed zoom observe key={} state=record-regular frame=({}, {}, {}, {})",
-                key,
-                candidate.frame.x,
-                candidate.frame.y,
-                candidate.frame.width,
-                candidate.frame.height
-            );
             self.last_regular_frames.insert(key.clone(), candidate.frame);
+            self.remember_frame(candidate);
         }
     }
 
@@ -318,42 +358,47 @@ impl CustomZoomTracker {
         let state_snapshot = self.states.get(key).copied();
         let last_regular = self.last_regular_frames.get(key).copied();
 
-        eprintln!(
-            "[dors-debug] managed zoom decide key={} native={} custom={} state_present={} settling_remaining={} last_regular={:?}",
-            key,
-            is_native_zoomed,
-            is_custom_zoomed,
-            state_snapshot.is_some(),
-            state_snapshot
-                .map(|state| state.settling_observations_remaining)
-                .unwrap_or(0),
-            last_regular
-        );
+        if debug_logging_enabled() {
+            eprintln!(
+                "[dors-debug] managed zoom decide key={} native={} custom={} state_present={} settling_remaining={} last_regular={:?}",
+                key,
+                is_native_zoomed,
+                is_custom_zoomed,
+                state_snapshot.is_some(),
+                state_snapshot
+                    .map(|state| state.settling_observations_remaining)
+                    .unwrap_or(0),
+                last_regular
+            );
+        }
 
         if let Some(state) = state_snapshot {
             if is_native_zoomed {
-                eprintln!(
-                    "[dors-debug] managed zoom decide key={} transition=restore restore_frame=({}, {}, {}, {})",
-                    key,
-                    state.restore_frame.x,
-                    state.restore_frame.y,
-                    state.restore_frame.width,
-                    state.restore_frame.height
-                );
+                if debug_logging_enabled() {
+                    eprintln!(
+                        "[dors-debug] managed zoom decide key={} transition=restore restore_frame=({}, {}, {}, {})",
+                        key,
+                        state.restore_frame.x,
+                        state.restore_frame.y,
+                        state.restore_frame.width,
+                        state.restore_frame.height
+                    );
+                }
                 self.states.remove(key);
                 self.last_regular_frames.insert(key.clone(), state.restore_frame);
+                self.remember_frame(candidate);
                 return Some(ClampOperation::Restore(state.restore_frame));
             }
 
             if is_custom_zoomed {
+                self.remember_frame(candidate);
                 return None;
             }
 
             self.states.remove(key);
-            self.last_regular_frames
-                .insert(key.clone(), candidate.frame);
-            return clamp_window_frame(candidate.frame, custom_area)
-                .map(ClampOperation::Restore);
+            self.last_regular_frames.insert(key.clone(), candidate.frame);
+            self.remember_frame(candidate);
+            return clamp_window_frame(candidate.frame, custom_area).map(ClampOperation::Restore);
         }
 
         if is_native_zoomed {
@@ -362,14 +407,16 @@ impl CustomZoomTracker {
                 .get(key)
                 .copied()
                 .unwrap_or(candidate.frame);
-            eprintln!(
-                "[dors-debug] managed zoom decide key={} transition=set-managed restore_frame=({}, {}, {}, {})",
-                key,
-                restore_frame.x,
-                restore_frame.y,
-                restore_frame.width,
-                restore_frame.height
-            );
+            if debug_logging_enabled() {
+                eprintln!(
+                    "[dors-debug] managed zoom decide key={} transition=set-managed restore_frame=({}, {}, {}, {})",
+                    key,
+                    restore_frame.x,
+                    restore_frame.y,
+                    restore_frame.width,
+                    restore_frame.height
+                );
+            }
             self.states.insert(
                 key.clone(),
                 CustomZoomState {
@@ -377,20 +424,23 @@ impl CustomZoomTracker {
                     settling_observations_remaining: 4,
                 },
             );
+            self.remember_frame(candidate);
             return Some(ClampOperation::ResizeToArea(custom_area));
         }
 
         if is_custom_zoomed {
             if let Some(restore_frame) = last_regular {
                 if restore_frame != candidate.frame {
-                    eprintln!(
-                        "[dors-debug] managed zoom decide key={} transition=rehydrate restore_frame=({}, {}, {}, {})",
-                        key,
-                        restore_frame.x,
-                        restore_frame.y,
-                        restore_frame.width,
-                        restore_frame.height
-                    );
+                    if debug_logging_enabled() {
+                        eprintln!(
+                            "[dors-debug] managed zoom decide key={} transition=rehydrate restore_frame=({}, {}, {}, {})",
+                            key,
+                            restore_frame.x,
+                            restore_frame.y,
+                            restore_frame.width,
+                            restore_frame.height
+                        );
+                    }
                     self.states.insert(
                         key.clone(),
                         CustomZoomState {
@@ -400,11 +450,12 @@ impl CustomZoomTracker {
                     );
                 }
             }
+            self.remember_frame(candidate);
             return None;
         }
 
-        self.last_regular_frames
-            .insert(key.clone(), candidate.frame);
+        self.last_regular_frames.insert(key.clone(), candidate.frame);
+        self.remember_frame(candidate);
         clamp_window_frame(candidate.frame, custom_area).map(ClampOperation::Restore)
     }
 }
@@ -448,21 +499,25 @@ pub fn clamp_windows_with_managed_zoom(
     native_area: WorkingArea,
     custom_area: WorkingArea,
 ) -> Result<(), String> {
-    eprintln!(
-        "[dors-debug] clamp_windows_with_managed_zoom native=x={} y={} w={} h={} custom=x={} y={} w={} h={}",
-        native_area.x,
-        native_area.y,
-        native_area.width,
-        native_area.height,
-        custom_area.x,
-        custom_area.y,
-        custom_area.width,
-        custom_area.height
-    );
+    if debug_logging_enabled() {
+        eprintln!(
+            "[dors-debug] clamp_windows_with_managed_zoom native=x={} y={} w={} h={} custom=x={} y={} w={} h={}",
+            native_area.x,
+            native_area.y,
+            native_area.width,
+            native_area.height,
+            custom_area.x,
+            custom_area.y,
+            custom_area.width,
+            custom_area.height
+        );
+    }
     if let Err(error) = apply_managed_custom_zoom(native_area, custom_area) {
         eprintln!("[dors-debug] managed zoom pass failed: {error}");
     }
-    eprintln!("[dors-debug] fallback clamp pass running");
+    if debug_logging_enabled() {
+        eprintln!("[dors-debug] fallback clamp pass running");
+    }
     clamp_windows_in_area(custom_area)
 }
 
@@ -471,22 +526,26 @@ pub fn initialize_startup_window_states(
     native_area: WorkingArea,
     custom_area: WorkingArea,
 ) -> Result<(), String> {
-    eprintln!(
-        "[dors-debug] initialize_startup_window_states native=x={} y={} w={} h={} custom=x={} y={} w={} h={}",
-        native_area.x,
-        native_area.y,
-        native_area.width,
-        native_area.height,
-        custom_area.x,
-        custom_area.y,
-        custom_area.width,
-        custom_area.height
-    );
+    if debug_logging_enabled() {
+        eprintln!(
+            "[dors-debug] initialize_startup_window_states native=x={} y={} w={} h={} custom=x={} y={} w={} h={}",
+            native_area.x,
+            native_area.y,
+            native_area.width,
+            native_area.height,
+            custom_area.x,
+            custom_area.y,
+            custom_area.width,
+            custom_area.height
+        );
+    }
     let windows = query_windows()?;
-    eprintln!(
-        "[dors-debug] initialize_startup_window_states observed_windows={}",
-        windows.len()
-    );
+    if debug_logging_enabled() {
+        eprintln!(
+            "[dors-debug] initialize_startup_window_states observed_windows={}",
+            windows.len()
+        );
+    }
     let tracker = custom_zoom_tracker();
     let mut tracker = tracker
         .lock()
@@ -500,23 +559,27 @@ pub fn initialize_startup_window_states(
 
     for window in windows {
         if !should_clamp_candidate(&window.candidate, screen) {
-            eprintln!(
-                "[dors-debug] startup skip key={} reason=not-clamp-candidate",
-                window.candidate.stable_key
-            );
+            if debug_logging_enabled() {
+                eprintln!(
+                    "[dors-debug] startup skip key={} reason=not-clamp-candidate",
+                    window.candidate.stable_key
+                );
+            }
             continue;
         }
 
         if let Some(operation) =
             tracker.plan_startup_operation(&window.candidate, native_area, custom_area)
         {
-            eprintln!(
-                "[dors-debug] startup apply key={} action={}",
-                window.candidate.stable_key,
-                describe_operation(operation)
-            );
+            if debug_logging_enabled() {
+                eprintln!(
+                    "[dors-debug] startup apply key={} action={}",
+                    window.candidate.stable_key,
+                    describe_operation(operation)
+                );
+            }
             apply_operation(&window, operation)?;
-        } else {
+        } else if debug_logging_enabled() {
             eprintln!(
                 "[dors-debug] startup seed key={} frame=({}, {}, {}, {})",
                 window.candidate.stable_key,
@@ -537,18 +600,20 @@ pub fn clamp_windows_for_pid_with_managed_zoom(
     native_area: WorkingArea,
     custom_area: WorkingArea,
 ) -> Result<(), String> {
-    eprintln!(
-        "[dors-debug] clamp_windows_for_pid_with_managed_zoom pid={} native=x={} y={} w={} h={} custom=x={} y={} w={} h={}",
-        pid,
-        native_area.x,
-        native_area.y,
-        native_area.width,
-        native_area.height,
-        custom_area.x,
-        custom_area.y,
-        custom_area.width,
-        custom_area.height
-    );
+    if debug_logging_enabled() {
+        eprintln!(
+            "[dors-debug] clamp_windows_for_pid_with_managed_zoom pid={} native=x={} y={} w={} h={} custom=x={} y={} w={} h={}",
+            pid,
+            native_area.x,
+            native_area.y,
+            native_area.width,
+            native_area.height,
+            custom_area.x,
+            custom_area.y,
+            custom_area.width,
+            custom_area.height
+        );
+    }
     let windows = query_windows_for_pid(pid)?;
     apply_managed_custom_zoom_to_windows(windows, native_area, custom_area)
 }
@@ -584,38 +649,48 @@ pub fn clamp_ax_window_with_managed_zoom(
         .lock()
         .map_err(|_| "failed to lock zoom tracker".to_string())?;
 
-    eprintln!(
-        "[dors-debug] managed zoom inspect key={} owner={} title={:?} frame=({}, {}, {}, {})",
-        observed_window.candidate.stable_key,
-        observed_window.candidate.owner_name,
-        if observed_window.title.is_empty() {
-            None::<&str>
-        } else {
-            Some(observed_window.title.as_str())
-        },
-        observed_window.candidate.frame.x,
-        observed_window.candidate.frame.y,
-        observed_window.candidate.frame.width,
-        observed_window.candidate.frame.height
-    );
+    if tracker.should_skip_frame(&observed_window.candidate) {
+        return Ok(true);
+    }
+
+    if debug_logging_enabled() {
+        eprintln!(
+            "[dors-debug] managed zoom inspect key={} owner={} title={:?} frame=({}, {}, {}, {})",
+            observed_window.candidate.stable_key,
+            observed_window.candidate.owner_name,
+            if observed_window.title.is_empty() {
+                None::<&str>
+            } else {
+                Some(observed_window.title.as_str())
+            },
+            observed_window.candidate.frame.x,
+            observed_window.candidate.frame.y,
+            observed_window.candidate.frame.width,
+            observed_window.candidate.frame.height
+        );
+    }
 
     tracker.observe_window_frame(&observed_window.candidate, native_area, custom_area);
 
     let Some(operation) =
         tracker.plan_operation(&observed_window.candidate, native_area, custom_area)
     else {
-        eprintln!(
-            "[dors-debug] managed zoom no-op key={} reason=no-planned-operation",
-            observed_window.candidate.stable_key
-        );
+        if debug_logging_enabled() {
+            eprintln!(
+                "[dors-debug] managed zoom no-op key={} reason=no-planned-operation",
+                observed_window.candidate.stable_key
+            );
+        }
         return Ok(true);
     };
 
-    eprintln!(
-        "[dors-debug] managed zoom apply key={} action={}",
-        observed_window.candidate.stable_key,
-        describe_operation(operation)
-    );
+    if debug_logging_enabled() {
+        eprintln!(
+            "[dors-debug] managed zoom apply key={} action={}",
+            observed_window.candidate.stable_key,
+            describe_operation(operation)
+        );
+    }
     apply_ax_operation(window.cast(), operation)?;
     Ok(true)
 }
@@ -721,10 +796,12 @@ fn apply_managed_custom_zoom_to_windows(
     native_area: WorkingArea,
     custom_area: WorkingArea,
 ) -> Result<(), String> {
-    eprintln!(
-        "[dors-debug] managed zoom observed_windows={}",
-        windows.len()
-    );
+    if debug_logging_enabled() {
+        eprintln!(
+            "[dors-debug] managed zoom observed_windows={}",
+            windows.len()
+        );
+    }
     let tracker = custom_zoom_tracker();
     let mut tracker = tracker.lock().map_err(|_| "failed to lock zoom tracker".to_string())?;
     let screen = ScreenFrame {
@@ -735,42 +812,53 @@ fn apply_managed_custom_zoom_to_windows(
     };
 
     for window in windows {
-        eprintln!(
-            "[dors-debug] managed zoom inspect key={} owner={} title={:?} frame=({}, {}, {}, {})",
-            window.candidate.stable_key,
-            window.candidate.owner_name,
-            if window.title.is_empty() {
-                None::<&str>
-            } else {
-                Some(window.title.as_str())
-            },
-            window.candidate.frame.x,
-            window.candidate.frame.y,
-            window.candidate.frame.width,
-            window.candidate.frame.height
-        );
-        if !should_clamp_candidate(&window.candidate, screen) {
+        if debug_logging_enabled() {
             eprintln!(
-                "[dors-debug] managed zoom skip key={} reason=not-clamp-candidate",
-                window.candidate.stable_key
+                "[dors-debug] managed zoom inspect key={} owner={} title={:?} frame=({}, {}, {}, {})",
+                window.candidate.stable_key,
+                window.candidate.owner_name,
+                if window.title.is_empty() {
+                    None::<&str>
+                } else {
+                    Some(window.title.as_str())
+                },
+                window.candidate.frame.x,
+                window.candidate.frame.y,
+                window.candidate.frame.width,
+                window.candidate.frame.height
             );
+        }
+        if !should_clamp_candidate(&window.candidate, screen) {
+            if debug_logging_enabled() {
+                eprintln!(
+                    "[dors-debug] managed zoom skip key={} reason=not-clamp-candidate",
+                    window.candidate.stable_key
+                );
+            }
+            continue;
+        }
+        if tracker.should_skip_frame(&window.candidate) {
             continue;
         }
 
         tracker.observe_window_frame(&window.candidate, native_area, custom_area);
 
         let Some(operation) = tracker.plan_operation(&window.candidate, native_area, custom_area) else {
-            eprintln!(
-                "[dors-debug] managed zoom no-op key={} reason=no-planned-operation",
-                window.candidate.stable_key
-            );
+            if debug_logging_enabled() {
+                eprintln!(
+                    "[dors-debug] managed zoom no-op key={} reason=no-planned-operation",
+                    window.candidate.stable_key
+                );
+            }
             continue;
         };
-        eprintln!(
-            "[dors-debug] managed zoom apply key={} action={}",
-            window.candidate.stable_key,
-            describe_operation(operation)
-        );
+        if debug_logging_enabled() {
+            eprintln!(
+                "[dors-debug] managed zoom apply key={} action={}",
+                window.candidate.stable_key,
+                describe_operation(operation)
+            );
+        }
         apply_operation(&window, operation)?;
     }
 
