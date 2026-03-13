@@ -38,6 +38,10 @@ impl HoverDelayState {
         self.delay_millis
     }
 
+    pub fn current_item(&self) -> Option<usize> {
+        self.current_item
+    }
+
     pub fn schedule_for_item(&mut self, item_index: usize) -> HoverToken {
         self.version += 1;
         self.current_item = Some(item_index);
@@ -73,7 +77,10 @@ pub fn activation_script_for_window(process_name: &str, window_title: &str) -> S
         "tell application \"System Events\"\n\
 tell application process \"{process_name}\"\n\
 set frontmost to true\n\
-perform action \"AXRaise\" of first window whose name is \"{window_title}\"\n\
+set targetWindow to first window whose name is \"{window_title}\"\n\
+set value of attribute \"AXMain\" of targetWindow to true\n\
+set value of attribute \"AXFocused\" of targetWindow to true\n\
+perform action \"AXRaise\" of targetWindow\n\
 end tell\n\
 end tell"
     )
@@ -86,6 +93,14 @@ pub fn parse_window_title_lines(raw: &str) -> Vec<HoveredWindow> {
         .enumerate()
         .map(|(index, title)| HoveredWindow::new(index, title))
         .collect()
+}
+
+pub fn popup_anchor_y(button_origin_y: f64, button_height: f64) -> f64 {
+    button_origin_y + button_height + 8.0
+}
+
+pub fn hover_menu_dismiss_delay_millis() -> u64 {
+    260
 }
 
 #[cfg(target_os = "macos")]

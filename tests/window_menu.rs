@@ -1,6 +1,7 @@
 use dors::native_app::window_menu::{
     HoverDelayState, HoveredWindow, activation_script_for_window, filtered_hovered_windows,
-    parse_window_title_lines, should_show_window_menu,
+    hover_menu_dismiss_delay_millis, parse_window_title_lines, popup_anchor_y,
+    should_show_window_menu,
 };
 
 #[test]
@@ -32,6 +33,8 @@ fn window_menu_builds_specific_window_activation_script() {
     assert!(script.contains("application process \"Cursor\""));
     assert!(script.contains("first window whose name is \"README.md\""));
     assert!(script.contains("perform action \"AXRaise\""));
+    assert!(script.contains("attribute \"AXMain\""));
+    assert!(script.contains("attribute \"AXFocused\""));
 }
 
 #[test]
@@ -65,4 +68,14 @@ fn window_menu_parses_line_based_window_output_and_skips_blank_titles() {
         windows,
         vec![HoveredWindow::new(0, "Main"), HoveredWindow::new(1, "Preferences")]
     );
+}
+
+#[test]
+fn window_menu_anchor_is_positioned_above_the_icon_button() {
+    assert_eq!(popup_anchor_y(2.0, 48.0), 58.0);
+}
+
+#[test]
+fn window_menu_uses_a_short_dismiss_delay() {
+    assert_eq!(hover_menu_dismiss_delay_millis(), 260);
 }

@@ -26,11 +26,17 @@ define_class!(
         #[unsafe(method(mouseEntered:))]
         fn mouse_entered(&self, _event: &objc2_app_kit::NSEvent) {
             apply_hover_shadow(self, true);
+            if let Some(target) = self.target() {
+                let _: () = unsafe { msg_send![&*target, hoverEnteredDockItem: self] };
+            }
         }
 
         #[unsafe(method(mouseExited:))]
         fn mouse_exited(&self, _event: &objc2_app_kit::NSEvent) {
             apply_hover_shadow(self, false);
+            if let Some(target) = self.target() {
+                let _: () = unsafe { msg_send![&*target, hoverExitedDockItem: self] };
+            }
         }
     }
 );

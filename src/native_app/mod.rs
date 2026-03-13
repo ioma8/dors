@@ -11,3 +11,4 @@ pub mod system_dock;
 pub mod view_model;
 pub mod window_clamper;
 pub mod window_menu;
+pub mod window_popup;
