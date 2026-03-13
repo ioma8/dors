@@ -2,6 +2,11 @@ use std::collections::HashMap;
 #[cfg(target_os = "macos")]
 use std::sync::{Mutex, OnceLock};
 
+#[cfg(target_os = "macos")]
+use core_foundation::base::{CFRelease, CFTypeRef, TCFType};
+#[cfg(target_os = "macos")]
+use core_foundation::string::{CFString, CFStringRef};
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ScreenFrame {
     pub x: i32,
@@ -98,6 +103,64 @@ pub fn build_allowed_work_area(
     }
 }
 
+#[cfg(target_os = "macos")]
+type AXError = i32;
+#[cfg(target_os = "macos")]
+type AXUIElementRef = *const c_void;
+#[cfg(target_os = "macos")]
+type AXValueRef = *const c_void;
+#[cfg(target_os = "macos")]
+type AXValueType = u32;
+#[cfg(target_os = "macos")]
+type CFArrayRef = *const c_void;
+#[cfg(target_os = "macos")]
+type CFBooleanRef = *const c_void;
+
+#[cfg(target_os = "macos")]
+const AX_ERROR_SUCCESS: AXError = 0;
+#[cfg(target_os = "macos")]
+const AX_VALUE_CGPOINT_TYPE: AXValueType = 1;
+#[cfg(target_os = "macos")]
+const AX_VALUE_CGSIZE_TYPE: AXValueType = 2;
+
+#[cfg(target_os = "macos")]
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+struct CGPoint {
+    x: f64,
+    y: f64,
+}
+
+#[cfg(target_os = "macos")]
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+struct CGSize {
+    width: f64,
+    height: f64,
+}
+
+#[cfg(target_os = "macos")]
+unsafe extern "C" {
+    fn AXUIElementCreateApplication(pid: i32) -> AXUIElementRef;
+    fn AXUIElementCopyAttributeValue(
+        element: AXUIElementRef,
+        attribute: CFStringRef,
+        value: *mut CFTypeRef,
+    ) -> AXError;
+    fn AXUIElementSetAttributeValue(
+        element: AXUIElementRef,
+        attribute: CFStringRef,
+        value: CFTypeRef,
+    ) -> AXError;
+    fn AXValueCreate(value_type: AXValueType, value_ptr: *const c_void) -> AXValueRef;
+    fn AXValueGetType(value: AXValueRef) -> AXValueType;
+    fn AXValueGetValue(value: AXValueRef, value_type: AXValueType, value_ptr: *mut c_void) -> u8;
+    fn CFArrayGetCount(array: CFArrayRef) -> isize;
+    fn CFArrayGetValueAtIndex(array: CFArrayRef, index: isize) -> *const c_void;
+    fn CFEqual(left: *const c_void, right: *const c_void) -> u8;
+    fn CFBooleanGetValue(boolean: CFBooleanRef) -> u8;
+}
+
 pub fn clamp_window_frame(frame: WindowFrame, area: WorkingArea) -> Option<WindowFrame> {
     let clamped_height = frame.height.min(area.height).max(0);
     let top = area.y + area.height;
@@ -120,6 +183,19 @@ pub fn frame_matches_work_area(frame: WindowFrame, area: WorkingArea) -> bool {
         && frame.height == area.height
 }
 
+fn frame_matches_startup_maximized_heuristic(
+    frame: WindowFrame,
+    native_area: WorkingArea,
+) -> bool {
+    let x_matches = (frame.x - native_area.x).abs() <= 4;
+    let y_matches = (frame.y - native_area.y).abs() <= 4;
+    let width_matches = (frame.width - native_area.width).abs() <= 4;
+    let min_height = (f64::from(native_area.height) * 0.8).round() as i32;
+    let height_matches = frame.height >= min_height && frame.height <= native_area.height;
+
+    x_matches && y_matches && width_matches && height_matches
+}
+
 pub fn normalize_ax_value(value: &str) -> &str {
     let trimmed = value.trim();
     if trimmed.eq_ignore_ascii_case("missing value") {
@@ -130,6 +206,43 @@ pub fn normalize_ax_value(value: &str) -> &str {
 }
 
 impl CustomZoomTracker {
+    pub fn plan_startup_operation(
+        &mut self,
+        candidate: &WindowCandidate,
+        native_area: WorkingArea,
+        custom_area: WorkingArea,
+    ) -> Option<ClampOperation> {
+        let key = &candidate.stable_key;
+        let is_native_zoomed = frame_matches_work_area(candidate.frame, native_area);
+        let is_custom_zoomed = frame_matches_work_area(candidate.frame, custom_area);
+        let is_startup_maximized =
+            is_native_zoomed || is_custom_zoomed
+                || frame_matches_startup_maximized_heuristic(candidate.frame, native_area);
+
+        if !is_startup_maximized {
+            self.last_regular_frames.insert(key.clone(), candidate.frame);
+            return None;
+        }
+
+        if is_custom_zoomed {
+            return None;
+        }
+
+        if let Some(restore_frame) = self.last_regular_frames.get(key).copied() {
+            self.states.insert(
+                key.clone(),
+                CustomZoomState {
+                    restore_frame,
+                    settling_observations_remaining: 4,
+                },
+            );
+        } else {
+            self.states.remove(key);
+        }
+
+        Some(ClampOperation::ResizeToArea(custom_area))
+    }
+
     pub fn handle_window_signal(
         &mut self,
         candidate: &WindowCandidate,
@@ -354,6 +467,71 @@ pub fn clamp_windows_with_managed_zoom(
 }
 
 #[cfg(target_os = "macos")]
+pub fn initialize_startup_window_states(
+    native_area: WorkingArea,
+    custom_area: WorkingArea,
+) -> Result<(), String> {
+    eprintln!(
+        "[dors-debug] initialize_startup_window_states native=x={} y={} w={} h={} custom=x={} y={} w={} h={}",
+        native_area.x,
+        native_area.y,
+        native_area.width,
+        native_area.height,
+        custom_area.x,
+        custom_area.y,
+        custom_area.width,
+        custom_area.height
+    );
+    let windows = query_windows()?;
+    eprintln!(
+        "[dors-debug] initialize_startup_window_states observed_windows={}",
+        windows.len()
+    );
+    let tracker = custom_zoom_tracker();
+    let mut tracker = tracker
+        .lock()
+        .map_err(|_| "failed to lock zoom tracker".to_string())?;
+    let screen = ScreenFrame {
+        x: custom_area.x,
+        y: 0,
+        width: custom_area.width,
+        height: native_area.y + native_area.height,
+    };
+
+    for window in windows {
+        if !should_clamp_candidate(&window.candidate, screen) {
+            eprintln!(
+                "[dors-debug] startup skip key={} reason=not-clamp-candidate",
+                window.candidate.stable_key
+            );
+            continue;
+        }
+
+        if let Some(operation) =
+            tracker.plan_startup_operation(&window.candidate, native_area, custom_area)
+        {
+            eprintln!(
+                "[dors-debug] startup apply key={} action={}",
+                window.candidate.stable_key,
+                describe_operation(operation)
+            );
+            apply_operation(&window, operation)?;
+        } else {
+            eprintln!(
+                "[dors-debug] startup seed key={} frame=({}, {}, {}, {})",
+                window.candidate.stable_key,
+                window.candidate.frame.x,
+                window.candidate.frame.y,
+                window.candidate.frame.width,
+                window.candidate.frame.height
+            );
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
 pub fn clamp_windows_for_pid_with_managed_zoom(
     pid: i32,
     native_area: WorkingArea,
@@ -373,6 +551,73 @@ pub fn clamp_windows_for_pid_with_managed_zoom(
     );
     let windows = query_windows_for_pid(pid)?;
     apply_managed_custom_zoom_to_windows(windows, native_area, custom_area)
+}
+
+#[cfg(target_os = "macos")]
+pub fn clamp_ax_window_with_managed_zoom(
+    pid: i32,
+    window: *const c_void,
+    native_area: WorkingArea,
+    custom_area: WorkingArea,
+) -> Result<bool, String> {
+    let Some(observed_window) = direct_ax_observed_window(pid, window.cast())? else {
+        return Ok(false);
+    };
+
+    let screen = ScreenFrame {
+        x: custom_area.x,
+        y: 0,
+        width: custom_area.width,
+        height: native_area.y + native_area.height,
+    };
+
+    if !should_clamp_candidate(&observed_window.candidate, screen) {
+        eprintln!(
+            "[dors-debug] managed zoom skip key={} reason=not-clamp-candidate",
+            observed_window.candidate.stable_key
+        );
+        return Ok(true);
+    }
+
+    let tracker = custom_zoom_tracker();
+    let mut tracker = tracker
+        .lock()
+        .map_err(|_| "failed to lock zoom tracker".to_string())?;
+
+    eprintln!(
+        "[dors-debug] managed zoom inspect key={} owner={} title={:?} frame=({}, {}, {}, {})",
+        observed_window.candidate.stable_key,
+        observed_window.candidate.owner_name,
+        if observed_window.title.is_empty() {
+            None::<&str>
+        } else {
+            Some(observed_window.title.as_str())
+        },
+        observed_window.candidate.frame.x,
+        observed_window.candidate.frame.y,
+        observed_window.candidate.frame.width,
+        observed_window.candidate.frame.height
+    );
+
+    tracker.observe_window_frame(&observed_window.candidate, native_area, custom_area);
+
+    let Some(operation) =
+        tracker.plan_operation(&observed_window.candidate, native_area, custom_area)
+    else {
+        eprintln!(
+            "[dors-debug] managed zoom no-op key={} reason=no-planned-operation",
+            observed_window.candidate.stable_key
+        );
+        return Ok(true);
+    };
+
+    eprintln!(
+        "[dors-debug] managed zoom apply key={} action={}",
+        observed_window.candidate.stable_key,
+        describe_operation(operation)
+    );
+    apply_ax_operation(window.cast(), operation)?;
+    Ok(true)
 }
 
 #[cfg(target_os = "macos")]
@@ -563,6 +808,7 @@ fn parse_window_rows(raw: &str) -> Vec<ObservedWindow> {
         .filter_map(|line| {
             let mut parts = line.split('\t');
             let owner_name = parts.next()?.trim().to_string();
+            let pid: i32 = parts.next()?.trim().parse().ok()?;
             let window_index: usize = parts.next()?.trim().parse().ok()?;
             let title = normalize_ax_value(parts.next()?).to_string();
             let document = normalize_ax_value(parts.next()?).to_string();
@@ -573,9 +819,9 @@ fn parse_window_rows(raw: &str) -> Vec<ObservedWindow> {
             let width = parts.next()?.trim().parse().ok()?;
             let height = parts.next()?.trim().parse().ok()?;
             let stable_key = if !document.is_empty() {
-                format!("{owner_name}::{document}")
+                format!("pid-{pid}::{document}")
             } else {
-                format!("{owner_name}::window-{window_index}")
+                format!("pid-{pid}::window-{window_index}")
             };
 
             Some(ObservedWindow {
@@ -602,6 +848,7 @@ set procNames to name of every application process whose background only is fals
 repeat with procName in procNames\n\
 if procName as text is not \"dors\" then\n\
 set proc to application process (procName as text)\n\
+set procPid to unix id of proc\n\
 set winIndex to 0\n\
 repeat with win in windows of proc\n\
 set winIndex to winIndex + 1\n\
@@ -624,7 +871,7 @@ set windowDocument to \"\"\n\
 try\n\
 set windowDocument to value of attribute \"AXDocument\" of win\n\
 end try\n\
-copy ((procName as text) & tab & (winIndex as text) & tab & windowTitle & tab & windowDocument & tab & (isStandard as text) & tab & (isFullScreen as text) & tab & (xPos as text) & tab & (yPos as text) & tab & (winWidth as text) & tab & (winHeight as text)) to end of rowTexts\n\
+copy ((procName as text) & tab & (procPid as text) & tab & (winIndex as text) & tab & windowTitle & tab & windowDocument & tab & (isStandard as text) & tab & (isFullScreen as text) & tab & (xPos as text) & tab & (yPos as text) & tab & (winWidth as text) & tab & (winHeight as text)) to end of rowTexts\n\
 end try\n\
 end repeat\n\
 end if\n\
@@ -640,6 +887,7 @@ fn build_query_windows_for_pid_script(pid: i32) -> String {
 set rowTexts to {{}}\n\
 set proc to first application process whose unix id is {pid}\n\
 set procName to name of proc\n\
+set procPid to unix id of proc\n\
 set winIndex to 0\n\
 repeat with win in windows of proc\n\
 set winIndex to winIndex + 1\n\
@@ -662,7 +910,7 @@ set windowDocument to \"\"\n\
 try\n\
 set windowDocument to value of attribute \"AXDocument\" of win\n\
 end try\n\
-copy ((procName as text) & tab & (winIndex as text) & tab & windowTitle & tab & windowDocument & tab & (isStandard as text) & tab & (isFullScreen as text) & tab & (xPos as text) & tab & (yPos as text) & tab & (winWidth as text) & tab & (winHeight as text)) to end of rowTexts\n\
+copy ((procName as text) & tab & (procPid as text) & tab & (winIndex as text) & tab & windowTitle & tab & windowDocument & tab & (isStandard as text) & tab & (isFullScreen as text) & tab & (xPos as text) & tab & (yPos as text) & tab & (winWidth as text) & tab & (winHeight as text)) to end of rowTexts\n\
 end try\n\
 end repeat\n\
 set AppleScript's text item delimiters to linefeed\n\
@@ -698,6 +946,255 @@ fn apply_operation(window: &ObservedWindow, operation: ClampOperation) -> Result
     }
 
     Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn direct_ax_observed_window(
+    pid: i32,
+    window: AXUIElementRef,
+) -> Result<Option<ObservedWindow>, String> {
+    if window.is_null() {
+        return Ok(None);
+    }
+
+    let application = unsafe { AXUIElementCreateApplication(pid) };
+    if application.is_null() {
+        return Ok(None);
+    }
+
+    let result = (|| {
+        let windows_value = copy_ax_attribute(application, "AXWindows")?;
+        let Some(windows_value) = windows_value else {
+            return Ok(None);
+        };
+
+        let window_index = find_window_index_in_array(windows_value.cast(), window)?;
+        unsafe {
+            CFRelease(windows_value.cast());
+        }
+        let Some(window_index) = window_index else {
+            return Ok(None);
+        };
+
+        let title = copy_ax_string_attribute(window, "AXTitle")?.unwrap_or_default();
+        let document = copy_ax_string_attribute(window, "AXDocument")?.unwrap_or_default();
+        let is_standard = copy_ax_string_attribute(window, "AXSubrole")?
+            .map(|value| value == "AXStandardWindow")
+            .unwrap_or(true);
+        let is_fullscreen = copy_ax_bool_attribute(window, "AXFullScreen")?.unwrap_or(false);
+        let frame = copy_ax_window_frame(window)?;
+        let owner_name = format!("pid-{pid}");
+        let stable_key = if !document.is_empty() {
+            format!("pid-{pid}::{document}")
+        } else {
+            format!("pid-{pid}::window-{window_index}")
+        };
+
+        Ok(Some(ObservedWindow {
+            window_index,
+            title,
+            candidate: WindowCandidate {
+                owner_name,
+                stable_key,
+                frame,
+                is_standard,
+                is_resizable: true,
+                is_fullscreen,
+                is_visible: true,
+            },
+        }))
+    })();
+
+    unsafe {
+        CFRelease(application.cast());
+    }
+    result
+}
+
+#[cfg(target_os = "macos")]
+fn apply_ax_operation(window: AXUIElementRef, operation: ClampOperation) -> Result<(), String> {
+    let target_frame = match operation {
+        ClampOperation::ResizeToArea(area) => WindowFrame {
+            x: area.x,
+            y: area.y,
+            width: area.width,
+            height: area.height,
+        },
+        ClampOperation::Restore(frame) => frame,
+    };
+
+    let size = CGSize {
+        width: f64::from(target_frame.width),
+        height: f64::from(target_frame.height),
+    };
+    let position = CGPoint {
+        x: f64::from(target_frame.x),
+        y: f64::from(target_frame.y),
+    };
+
+    let size_value =
+        unsafe { AXValueCreate(AX_VALUE_CGSIZE_TYPE, (&size as *const CGSize).cast()) };
+    let position_value =
+        unsafe { AXValueCreate(AX_VALUE_CGPOINT_TYPE, (&position as *const CGPoint).cast()) };
+    if size_value.is_null() || position_value.is_null() {
+        if !size_value.is_null() {
+            unsafe {
+                CFRelease(size_value.cast());
+            }
+        }
+        if !position_value.is_null() {
+            unsafe {
+                CFRelease(position_value.cast());
+            }
+        }
+        return Err("failed to create AX values for target frame".to_string());
+    }
+
+    let size_attribute = CFString::new("AXSize");
+    let position_attribute = CFString::new("AXPosition");
+
+    let size_error = unsafe {
+        AXUIElementSetAttributeValue(
+            window,
+            size_attribute.as_concrete_TypeRef(),
+            size_value.cast(),
+        )
+    };
+    let position_error = unsafe {
+        AXUIElementSetAttributeValue(
+            window,
+            position_attribute.as_concrete_TypeRef(),
+            position_value.cast(),
+        )
+    };
+
+    unsafe {
+        CFRelease(size_value.cast());
+        CFRelease(position_value.cast());
+    }
+
+    if size_error != AX_ERROR_SUCCESS {
+        return Err(format!("failed to set AXSize: error {size_error}"));
+    }
+    if position_error != AX_ERROR_SUCCESS {
+        return Err(format!("failed to set AXPosition: error {position_error}"));
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn copy_ax_attribute(element: AXUIElementRef, attribute_name: &str) -> Result<Option<CFTypeRef>, String> {
+    let attribute = CFString::new(attribute_name);
+    let mut value = std::ptr::null();
+    let error = unsafe {
+        AXUIElementCopyAttributeValue(element, attribute.as_concrete_TypeRef(), &mut value)
+    };
+    if error == AX_ERROR_SUCCESS {
+        return Ok((!value.is_null()).then_some(value));
+    }
+    Ok(None)
+}
+
+#[cfg(target_os = "macos")]
+fn copy_ax_string_attribute(
+    element: AXUIElementRef,
+    attribute_name: &str,
+) -> Result<Option<String>, String> {
+    let Some(value) = copy_ax_attribute(element, attribute_name)? else {
+        return Ok(None);
+    };
+    let string = unsafe { core_foundation::string::CFString::wrap_under_create_rule(value.cast()) };
+    Ok(Some(string.to_string()))
+}
+
+#[cfg(target_os = "macos")]
+fn copy_ax_bool_attribute(
+    element: AXUIElementRef,
+    attribute_name: &str,
+) -> Result<Option<bool>, String> {
+    let Some(value) = copy_ax_attribute(element, attribute_name)? else {
+        return Ok(None);
+    };
+    let boolean = unsafe { CFBooleanGetValue(value.cast()) != 0 };
+    unsafe {
+        CFRelease(value.cast());
+    }
+    Ok(Some(boolean))
+}
+
+#[cfg(target_os = "macos")]
+fn copy_ax_window_frame(element: AXUIElementRef) -> Result<WindowFrame, String> {
+    let position_value = copy_ax_attribute(element, "AXPosition")?
+        .ok_or_else(|| "AXPosition missing".to_string())?;
+    let size_value =
+        copy_ax_attribute(element, "AXSize")?.ok_or_else(|| "AXSize missing".to_string())?;
+
+    let position = ax_value_to_point(position_value.cast(), AX_VALUE_CGPOINT_TYPE)?;
+    let size = ax_value_to_size(size_value.cast(), AX_VALUE_CGSIZE_TYPE)?;
+
+    unsafe {
+        CFRelease(position_value.cast());
+        CFRelease(size_value.cast());
+    }
+
+    Ok(WindowFrame {
+        x: position.x.round() as i32,
+        y: position.y.round() as i32,
+        width: size.width.round() as i32,
+        height: size.height.round() as i32,
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn ax_value_to_point(value: AXValueRef, expected_type: AXValueType) -> Result<CGPoint, String> {
+    if unsafe { AXValueGetType(value) } != expected_type {
+        return Err("AXValue type mismatch for CGPoint".to_string());
+    }
+    let mut point = CGPoint { x: 0.0, y: 0.0 };
+    let success =
+        unsafe { AXValueGetValue(value, expected_type, (&mut point as *mut CGPoint).cast()) };
+    if success == 0 {
+        return Err("failed to read CGPoint from AXValue".to_string());
+    }
+    Ok(point)
+}
+
+#[cfg(target_os = "macos")]
+fn ax_value_to_size(value: AXValueRef, expected_type: AXValueType) -> Result<CGSize, String> {
+    if unsafe { AXValueGetType(value) } != expected_type {
+        return Err("AXValue type mismatch for CGSize".to_string());
+    }
+    let mut size = CGSize {
+        width: 0.0,
+        height: 0.0,
+    };
+    let success =
+        unsafe { AXValueGetValue(value, expected_type, (&mut size as *mut CGSize).cast()) };
+    if success == 0 {
+        return Err("failed to read CGSize from AXValue".to_string());
+    }
+    Ok(size)
+}
+
+#[cfg(target_os = "macos")]
+fn find_window_index_in_array(array: CFArrayRef, target: AXUIElementRef) -> Result<Option<usize>, String> {
+    if array.is_null() {
+        return Ok(None);
+    }
+
+    let count = unsafe { CFArrayGetCount(array) };
+    for index in 0..count {
+        let candidate = unsafe { CFArrayGetValueAtIndex(array, index) };
+        if candidate.is_null() {
+            continue;
+        }
+        if unsafe { CFEqual(candidate, target.cast()) } != 0 {
+            return Ok(Some(index as usize + 1));
+        }
+    }
+
+    Ok(None)
 }
 
 #[cfg(target_os = "macos")]
@@ -778,3 +1275,5 @@ end tell",
 }
 #[cfg(target_os = "macos")]
 use std::process::Command;
+#[cfg(target_os = "macos")]
+use std::ffi::c_void;

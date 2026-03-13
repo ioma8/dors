@@ -60,6 +60,7 @@ pub struct DockControllerState {
     panel_height: u32,
     clamp_scheduler: ClampScheduler,
     ax_frontmost_observer: Option<AxFrontmostObserver>,
+    startup_window_state_initialized: bool,
     hover_delay_state: HoverDelayState,
     hover_deadline: Option<Instant>,
     hover_dismiss_deadline: Option<Instant>,
@@ -250,6 +251,7 @@ impl DockController {
             panel_height,
             clamp_scheduler: ClampScheduler::new(),
             ax_frontmost_observer: None,
+            startup_window_state_initialized: false,
             hover_delay_state: HoverDelayState::new(),
             hover_deadline: None,
             hover_dismiss_deadline: None,
@@ -282,11 +284,18 @@ impl DockController {
     }
 
     pub fn install_ax_frontmost_observer(&self) -> Result<(), String> {
-        let (clamp_scheduler, work_areas) = {
+        let (clamp_scheduler, work_areas, run_startup_init) = {
             let state = self.ivars().borrow();
             let work_areas = window_clamper::main_screen_work_areas(required_height() as i32)?;
-            (state.clamp_scheduler.clone(), work_areas)
+            (
+                state.clamp_scheduler.clone(),
+                work_areas,
+                !state.startup_window_state_initialized,
+            )
         };
+        if run_startup_init {
+            window_clamper::initialize_startup_window_states(work_areas.0, work_areas.1)?;
+        }
         let observer = AxFrontmostObserver::start_frontmost(
             clamp_scheduler.clone(),
             work_areas.0,
@@ -303,6 +312,9 @@ impl DockController {
             });
         }
         let mut state = self.ivars().borrow_mut();
+        if run_startup_init {
+            state.startup_window_state_initialized = true;
+        }
         state.ax_frontmost_observer = observer;
         Ok(())
     }

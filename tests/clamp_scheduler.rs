@@ -40,7 +40,7 @@ fn clamp_scheduler_coalesces_one_follow_up_run_while_busy() {
 
     let task_runs = Arc::clone(&runs);
     let task_release_rx = Arc::clone(&release_rx);
-    scheduler.schedule_coalesced(move || {
+    let task = move || {
         let current = task_runs.fetch_add(1, Ordering::SeqCst);
         started_tx.send(current).expect("send start");
         if current == 0 {
@@ -51,15 +51,16 @@ fn clamp_scheduler_coalesces_one_follow_up_run_while_busy() {
                 .expect("wait release");
         }
         Ok::<_, String>(())
-    });
+    };
+    scheduler.schedule_coalesced(task.clone());
 
     assert_eq!(
         started_rx.recv_timeout(Duration::from_secs(1)).expect("first run"),
         0
     );
 
-    scheduler.schedule_coalesced(|| Ok::<_, String>(()));
-    scheduler.schedule_coalesced(|| Ok::<_, String>(()));
+    scheduler.schedule_coalesced(task.clone());
+    scheduler.schedule_coalesced(task);
 
     release_tx.send(()).expect("release first job");
 

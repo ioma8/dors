@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 #[cfg(target_os = "macos")]
-use core_foundation::base::{CFRelease, TCFType};
+use core_foundation::base::{CFRelease, CFRetain, TCFType};
 #[cfg(target_os = "macos")]
 use core_foundation::runloop::{CFRunLoop, CFRunLoopSource, kCFRunLoopDefaultMode};
 #[cfg(target_os = "macos")]
@@ -55,13 +55,19 @@ pub fn normalize_notification_name(name: &str) -> Option<WindowEventKind> {
     }
 }
 
-pub fn observer_notification_names() -> [&'static str; 5] {
+pub fn observer_notification_names() -> [&'static str; 11] {
     [
+        "AXCreated",
         "AXFocusedWindowChanged",
         "AXMainWindowChanged",
+        "AXTitleChanged",
+        "AXUIElementDestroyed",
+        "AXWindowDeminiaturized",
+        "AXWindowMiniaturized",
         "AXWindowMoved",
         "AXWindowResized",
-        "AXWindowMiniaturized",
+        "AXMenuOpened",
+        "AXMenuClosed",
     ]
 }
 
@@ -304,7 +310,7 @@ impl Drop for AxFrontmostObserver {
 #[cfg(target_os = "macos")]
 extern "C" fn ax_observer_callback(
     _observer: AXObserverRef,
-    _element: AXUIElementRef,
+    element: AXUIElementRef,
     notification: CFStringRef,
     refcon: *mut c_void,
 ) {
@@ -312,21 +318,49 @@ extern "C" fn ax_observer_callback(
         return;
     };
     let notification_name = unsafe { CFString::wrap_under_get_rule(notification) }.to_string();
+    eprintln!("[dors-debug] ax event notification={notification_name}");
     if normalize_notification_name(&notification_name).is_none() {
         return;
     }
-    eprintln!("[dors-debug] ax event notification={notification_name}");
     let clamp_scheduler = context.clamp_scheduler.clone();
     let pid = context.pid;
     let native_area = context.native_area;
     let custom_area = context.custom_area;
+    let normalized = normalize_notification_name(&notification_name);
+    let retained_element = if normalized == Some(WindowEventKind::Resized) && !element.is_null() {
+        unsafe {
+            CFRetain(element.cast());
+        }
+        Some(element as usize)
+    } else {
+        None
+    };
     clamp_scheduler
         .schedule_coalesced(move || {
-            crate::native_app::window_clamper::clamp_windows_for_pid_with_managed_zoom(
-                pid,
-                native_area,
-                custom_area,
-            )
+            let direct_result = retained_element.map(|retained| {
+                let retained = retained as *const c_void;
+                let result = crate::native_app::window_clamper::clamp_ax_window_with_managed_zoom(
+                    pid,
+                    retained,
+                    native_area,
+                    custom_area,
+                );
+                unsafe {
+                    CFRelease(retained.cast());
+                }
+                result
+            });
+
+            match direct_result {
+                Some(Ok(true)) => Ok(()),
+                Some(Ok(false)) | Some(Err(_)) | None => {
+                    crate::native_app::window_clamper::clamp_windows_for_pid_with_managed_zoom(
+                        pid,
+                        native_area,
+                        custom_area,
+                    )
+                }
+            }
         });
 }
 

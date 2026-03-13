@@ -619,3 +619,194 @@ fn managed_zoom_reducer_handles_passive_and_active_signals() {
         Some(ClampOperation::ResizeToArea(custom_area))
     );
 }
+
+#[test]
+fn startup_initialization_records_regular_frame_without_operation() {
+    let native_area = WorkingArea {
+        x: 0,
+        y: 31,
+        width: 1920,
+        height: 1049,
+    };
+    let custom_area = WorkingArea {
+        x: 0,
+        y: 31,
+        width: 1920,
+        height: 993,
+    };
+    let mut tracker = CustomZoomTracker::default();
+    let regular = WindowCandidate {
+        owner_name: "idea".to_string(),
+        stable_key: "idea::window-1".to_string(),
+        frame: WindowFrame {
+            x: 120,
+            y: 90,
+            width: 1500,
+            height: 893,
+        },
+        is_standard: true,
+        is_resizable: true,
+        is_fullscreen: false,
+        is_visible: true,
+    };
+    let native_zoomed = WindowCandidate {
+        frame: WindowFrame {
+            x: 0,
+            y: 31,
+            width: 1920,
+            height: 1049,
+        },
+        ..regular.clone()
+    };
+
+    assert_eq!(
+        tracker.plan_startup_operation(&regular, native_area, custom_area),
+        None
+    );
+    assert_eq!(
+        tracker.plan_startup_operation(&native_zoomed, native_area, custom_area),
+        Some(ClampOperation::ResizeToArea(custom_area))
+    );
+    assert_eq!(
+        tracker.plan_operation(&native_zoomed, native_area, custom_area),
+        Some(ClampOperation::Restore(regular.frame))
+    );
+}
+
+#[test]
+fn startup_initialization_reclamps_native_zoom_without_unknown_restore_frame() {
+    let native_area = WorkingArea {
+        x: 0,
+        y: 31,
+        width: 1920,
+        height: 1049,
+    };
+    let custom_area = WorkingArea {
+        x: 0,
+        y: 31,
+        width: 1920,
+        height: 993,
+    };
+    let mut tracker = CustomZoomTracker::default();
+    let native_zoomed = WindowCandidate {
+        owner_name: "idea".to_string(),
+        stable_key: "idea::window-1".to_string(),
+        frame: WindowFrame {
+            x: 0,
+            y: 31,
+            width: 1920,
+            height: 1049,
+        },
+        is_standard: true,
+        is_resizable: true,
+        is_fullscreen: false,
+        is_visible: true,
+    };
+    let custom_zoomed = WindowCandidate {
+        frame: WindowFrame {
+            x: 0,
+            y: 31,
+            width: 1920,
+            height: 993,
+        },
+        ..native_zoomed.clone()
+    };
+
+    assert_eq!(
+        tracker.plan_startup_operation(&native_zoomed, native_area, custom_area),
+        Some(ClampOperation::ResizeToArea(custom_area))
+    );
+    assert_eq!(
+        tracker.plan_operation(&custom_zoomed, native_area, custom_area),
+        None
+    );
+    assert_eq!(
+        tracker.plan_operation(&native_zoomed, native_area, custom_area),
+        Some(ClampOperation::ResizeToArea(custom_area))
+    );
+}
+
+#[test]
+fn startup_initialization_does_not_seed_custom_zoomed_window_as_regular() {
+    let native_area = WorkingArea {
+        x: 0,
+        y: 31,
+        width: 1920,
+        height: 1049,
+    };
+    let custom_area = WorkingArea {
+        x: 0,
+        y: 31,
+        width: 1920,
+        height: 993,
+    };
+    let mut tracker = CustomZoomTracker::default();
+    let custom_zoomed = WindowCandidate {
+        owner_name: "slack".to_string(),
+        stable_key: "pid-1039::window-1".to_string(),
+        frame: WindowFrame {
+            x: 0,
+            y: 31,
+            width: 1920,
+            height: 993,
+        },
+        is_standard: true,
+        is_resizable: true,
+        is_fullscreen: false,
+        is_visible: true,
+    };
+    let native_zoomed = WindowCandidate {
+        frame: WindowFrame {
+            x: 0,
+            y: 31,
+            width: 1920,
+            height: 1049,
+        },
+        ..custom_zoomed.clone()
+    };
+
+    assert_eq!(
+        tracker.plan_startup_operation(&custom_zoomed, native_area, custom_area),
+        None
+    );
+    assert_eq!(
+        tracker.plan_operation(&native_zoomed, native_area, custom_area),
+        Some(ClampOperation::ResizeToArea(custom_area))
+    );
+}
+
+#[test]
+fn startup_initialization_reclamps_legacy_dock_maximized_window() {
+    let native_area = WorkingArea {
+        x: 0,
+        y: 31,
+        width: 1920,
+        height: 1049,
+    };
+    let custom_area = WorkingArea {
+        x: 0,
+        y: 31,
+        width: 1920,
+        height: 993,
+    };
+    let mut tracker = CustomZoomTracker::default();
+    let legacy_maximized = WindowCandidate {
+        owner_name: "slack".to_string(),
+        stable_key: "pid-1039::window-1".to_string(),
+        frame: WindowFrame {
+            x: 0,
+            y: 31,
+            width: 1920,
+            height: 893,
+        },
+        is_standard: true,
+        is_resizable: true,
+        is_fullscreen: false,
+        is_visible: true,
+    };
+
+    assert_eq!(
+        tracker.plan_startup_operation(&legacy_maximized, native_area, custom_area),
+        Some(ClampOperation::ResizeToArea(custom_area))
+    );
+}
