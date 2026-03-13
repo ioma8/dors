@@ -32,6 +32,10 @@ cargo run
 
 ## Runtime Data Flow
 
+![dors app data flow](docs/app-dataflow.svg)
+
+Mermaid source: `docs/app-dataflow.mmd`
+
 Startup:
 - `src/main.rs` boots the native AppKit app.
 - `src/native_app/app.rs` creates the dock panel and controller.

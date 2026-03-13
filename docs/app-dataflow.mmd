@@ -1,0 +1,28 @@
+flowchart TD
+    A[App Start\nsrc/main.rs] --> B[Native App Bootstrap\nsrc/native_app/app.rs]
+    B --> C[Load Config / Import Dock\nsrc/native_app/refresh.rs]
+    C --> D[Adapters\nDock import, running apps,\napp resolver, icon loader]
+    D --> E[Domain Models\nsrc/domain]
+    E --> F[Merge Dock State\nsrc/services/dock_state.rs]
+    F --> G[Native View Models\nsrc/native_app/view_model.rs]
+    G --> H[Render Dock Panel\nsrc/native_app/dock_view.rs]
+
+    H --> I[Click Dock Item]
+    I --> J[Launcher\nsrc/services/launcher.rs]
+    J --> K[Activate or Launch App]
+
+    H --> L[Hover Multi-window App]
+    L --> M[Read Windows via AX\nsrc/native_app/window_menu.rs]
+    M --> N[Native Popover\nsrc/native_app/window_popup.rs]
+    N --> O[Activate Specific Window]
+
+    H --> P[Right Click Dock Item]
+    P --> Q[Native Context Menu\nsrc/native_app/app_context_menu.rs]
+    Q --> R[Kill / Force Kill / Copy PID]
+
+    B --> S[Install AX Observer\nsrc/native_app/ax_window_manager.rs]
+    S --> T[Window Geometry Events]
+    T --> U[Window Clamper\nsrc/native_app/window_clamper.rs]
+    U --> V[Keep Windows Inside\nCustom Work Area]
+
+    C --> W[Persisted Config Store\nsrc/config]
