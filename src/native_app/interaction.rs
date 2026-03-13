@@ -18,6 +18,7 @@ use crate::native_app::clamp_scheduler::ClampScheduler;
 use crate::native_app::dock_view::{build_dock_view, required_height};
 use crate::native_app::refresh::load_startup_models;
 use crate::native_app::view_model::NativeDockItemModel;
+use crate::native_app::ax_window_manager::{AxFrontmostObserver, frontmost_application_pid};
 use crate::native_app::window_clamper;
 use crate::native_app::window_menu::{
     HoverDelayState, HoveredWindow, activate_specific_window, hover_menu_dismiss_delay_millis,
@@ -58,6 +59,7 @@ pub struct DockControllerState {
     panel_width: u32,
     panel_height: u32,
     clamp_scheduler: ClampScheduler,
+    ax_frontmost_observer: Option<AxFrontmostObserver>,
     hover_delay_state: HoverDelayState,
     hover_deadline: Option<Instant>,
     hover_dismiss_deadline: Option<Instant>,
@@ -247,6 +249,7 @@ impl DockController {
             panel_width,
             panel_height,
             clamp_scheduler: ClampScheduler::new(),
+            ax_frontmost_observer: None,
             hover_delay_state: HoverDelayState::new(),
             hover_deadline: None,
             hover_dismiss_deadline: None,
@@ -278,7 +281,34 @@ impl DockController {
         }
     }
 
+    pub fn install_ax_frontmost_observer(&self) -> Result<(), String> {
+        let (clamp_scheduler, work_areas) = {
+            let state = self.ivars().borrow();
+            let work_areas = window_clamper::main_screen_work_areas(required_height() as i32)?;
+            (state.clamp_scheduler.clone(), work_areas)
+        };
+        let observer = AxFrontmostObserver::start_frontmost(
+            clamp_scheduler.clone(),
+            work_areas.0,
+            work_areas.1,
+        )?;
+        let observer_pid = observer.as_ref().map(|value| value.pid());
+        if let Some(pid) = observer_pid {
+            clamp_scheduler.schedule_coalesced(move || {
+                window_clamper::clamp_windows_for_pid_with_managed_zoom(
+                    pid,
+                    work_areas.0,
+                    work_areas.1,
+                )
+            });
+        }
+        let mut state = self.ivars().borrow_mut();
+        state.ax_frontmost_observer = observer;
+        Ok(())
+    }
+
     fn refresh_from_system(&self) {
+        self.sync_ax_frontmost_observer();
         let models = match load_startup_models() {
             Ok(models) => models,
             Err(error) => {
@@ -286,32 +316,37 @@ impl DockController {
                 return;
             }
         };
-        let clamp_scheduler = {
+        let should_render = {
             let mut state = self.ivars().borrow_mut();
-            let clamp_scheduler = state.clamp_scheduler.clone();
-            let allowed_area = match window_clamper::main_screen_allowed_work_area(required_height() as i32) {
-                Ok(area) => area,
-                Err(error) => {
-                    eprintln!("[dors-debug] native work area measurement failed: {error}");
-                    return;
-                }
-            };
             if state.models == models {
-                drop(state);
-                let _ = clamp_scheduler.try_schedule(move || {
-                    window_clamper::clamp_windows_in_area(allowed_area)
-                });
+                false
+            } else {
+                state.models = models;
+                true
+            }
+        };
+        if should_render && let Err(error) = self.render_current_models() {
+            eprintln!("[dors-debug] native render failed: {error}");
+        }
+    }
+
+    fn sync_ax_frontmost_observer(&self) {
+        let Some(frontmost_pid) = frontmost_application_pid() else {
+            return;
+        };
+        {
+            let state = self.ivars().borrow();
+            if state
+                .ax_frontmost_observer
+                .as_ref()
+                .is_some_and(|observer| observer.pid() == frontmost_pid)
+            {
                 return;
             }
-            state.models = models;
-            (clamp_scheduler, allowed_area)
-        };
-        let (clamp_scheduler, allowed_area) = clamp_scheduler;
-        let _ = clamp_scheduler.try_schedule(move || {
-            window_clamper::clamp_windows_in_area(allowed_area)
-        });
-        if let Err(error) = self.render_current_models() {
-            eprintln!("[dors-debug] native render failed: {error}");
+        }
+
+        if let Err(error) = self.install_ax_frontmost_observer() {
+            eprintln!("[dors-debug] failed to refresh AX frontmost observer: {error}");
         }
     }
 

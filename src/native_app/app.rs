@@ -63,6 +63,9 @@ pub fn run() -> Result<(), String> {
         models,
     );
     controller.render_current_models()?;
+    if let Err(error) = controller.install_ax_frontmost_observer() {
+        eprintln!("[dors-debug] failed to install AX frontmost observer: {error}");
+    }
     let _timer = controller.install_refresh_timer();
 
     let _ = app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);

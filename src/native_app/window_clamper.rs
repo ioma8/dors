@@ -1,3 +1,7 @@
+use std::collections::HashMap;
+#[cfg(target_os = "macos")]
+use std::sync::{Mutex, OnceLock};
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ScreenFrame {
     pub x: i32,
@@ -25,11 +29,57 @@ pub struct WindowFrame {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WindowCandidate {
     pub owner_name: String,
+    pub stable_key: String,
     pub frame: WindowFrame,
     pub is_standard: bool,
     pub is_resizable: bool,
     pub is_fullscreen: bool,
     pub is_visible: bool,
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ObservedWindow {
+    window_index: usize,
+    title: String,
+    candidate: WindowCandidate,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ClampOperation {
+    ResizeToArea(WorkingArea),
+    Restore(WindowFrame),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WindowSignal {
+    PassiveObservation,
+    GeometryChanged,
+}
+
+fn describe_operation(operation: ClampOperation) -> String {
+    match operation {
+        ClampOperation::ResizeToArea(area) => format!(
+            "resize-to-area x={} y={} w={} h={}",
+            area.x, area.y, area.width, area.height
+        ),
+        ClampOperation::Restore(frame) => format!(
+            "restore x={} y={} w={} h={}",
+            frame.x, frame.y, frame.width, frame.height
+        ),
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CustomZoomState {
+    restore_frame: WindowFrame,
+    settling_observations_remaining: u8,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct CustomZoomTracker {
+    states: HashMap<String, CustomZoomState>,
+    last_regular_frames: HashMap<String, WindowFrame>,
 }
 
 pub fn build_allowed_work_area(
@@ -61,6 +111,189 @@ pub fn clamp_window_frame(frame: WindowFrame, area: WorkingArea) -> Option<Windo
     };
 
     (clamped != frame).then_some(clamped)
+}
+
+pub fn frame_matches_work_area(frame: WindowFrame, area: WorkingArea) -> bool {
+    frame.x == area.x
+        && frame.y == area.y
+        && frame.width == area.width
+        && frame.height == area.height
+}
+
+pub fn normalize_ax_value(value: &str) -> &str {
+    let trimmed = value.trim();
+    if trimmed.eq_ignore_ascii_case("missing value") {
+        ""
+    } else {
+        trimmed
+    }
+}
+
+impl CustomZoomTracker {
+    pub fn handle_window_signal(
+        &mut self,
+        candidate: &WindowCandidate,
+        native_area: WorkingArea,
+        custom_area: WorkingArea,
+        signal: WindowSignal,
+    ) -> Option<ClampOperation> {
+        match signal {
+            WindowSignal::PassiveObservation => {
+                self.observe_window_frame(candidate, native_area, custom_area);
+                None
+            }
+            WindowSignal::GeometryChanged => self.plan_operation(candidate, native_area, custom_area),
+        }
+    }
+
+    pub fn observe_window_frame(
+        &mut self,
+        candidate: &WindowCandidate,
+        native_area: WorkingArea,
+        custom_area: WorkingArea,
+    ) {
+        let key = &candidate.stable_key;
+        let is_native_zoomed = frame_matches_work_area(candidate.frame, native_area);
+        let is_custom_zoomed = frame_matches_work_area(candidate.frame, custom_area);
+
+        if !is_native_zoomed && !is_custom_zoomed {
+            if let Some(state) = self.states.get_mut(key) {
+                if state.settling_observations_remaining > 0 {
+                    eprintln!(
+                        "[dors-debug] managed zoom observe key={} state=settling remaining={} frame=({}, {}, {}, {})",
+                        key,
+                        state.settling_observations_remaining,
+                        candidate.frame.x,
+                        candidate.frame.y,
+                        candidate.frame.width,
+                        candidate.frame.height
+                    );
+                    state.settling_observations_remaining -= 1;
+                    return;
+                }
+                eprintln!(
+                    "[dors-debug] managed zoom observe key={} state=clear-managed frame=({}, {}, {}, {})",
+                    key,
+                    candidate.frame.x,
+                    candidate.frame.y,
+                    candidate.frame.width,
+                    candidate.frame.height
+                );
+                self.states.remove(key);
+            }
+            eprintln!(
+                "[dors-debug] managed zoom observe key={} state=record-regular frame=({}, {}, {}, {})",
+                key,
+                candidate.frame.x,
+                candidate.frame.y,
+                candidate.frame.width,
+                candidate.frame.height
+            );
+            self.last_regular_frames.insert(key.clone(), candidate.frame);
+        }
+    }
+
+    pub fn plan_operation(
+        &mut self,
+        candidate: &WindowCandidate,
+        native_area: WorkingArea,
+        custom_area: WorkingArea,
+    ) -> Option<ClampOperation> {
+        let key = &candidate.stable_key;
+        let is_native_zoomed = frame_matches_work_area(candidate.frame, native_area);
+        let is_custom_zoomed = frame_matches_work_area(candidate.frame, custom_area);
+        let state_snapshot = self.states.get(key).copied();
+        let last_regular = self.last_regular_frames.get(key).copied();
+
+        eprintln!(
+            "[dors-debug] managed zoom decide key={} native={} custom={} state_present={} settling_remaining={} last_regular={:?}",
+            key,
+            is_native_zoomed,
+            is_custom_zoomed,
+            state_snapshot.is_some(),
+            state_snapshot
+                .map(|state| state.settling_observations_remaining)
+                .unwrap_or(0),
+            last_regular
+        );
+
+        if let Some(state) = state_snapshot {
+            if is_native_zoomed {
+                eprintln!(
+                    "[dors-debug] managed zoom decide key={} transition=restore restore_frame=({}, {}, {}, {})",
+                    key,
+                    state.restore_frame.x,
+                    state.restore_frame.y,
+                    state.restore_frame.width,
+                    state.restore_frame.height
+                );
+                self.states.remove(key);
+                self.last_regular_frames.insert(key.clone(), state.restore_frame);
+                return Some(ClampOperation::Restore(state.restore_frame));
+            }
+
+            if is_custom_zoomed {
+                return None;
+            }
+
+            self.states.remove(key);
+            self.last_regular_frames
+                .insert(key.clone(), candidate.frame);
+            return clamp_window_frame(candidate.frame, custom_area)
+                .map(ClampOperation::Restore);
+        }
+
+        if is_native_zoomed {
+            let restore_frame = self
+                .last_regular_frames
+                .get(key)
+                .copied()
+                .unwrap_or(candidate.frame);
+            eprintln!(
+                "[dors-debug] managed zoom decide key={} transition=set-managed restore_frame=({}, {}, {}, {})",
+                key,
+                restore_frame.x,
+                restore_frame.y,
+                restore_frame.width,
+                restore_frame.height
+            );
+            self.states.insert(
+                key.clone(),
+                CustomZoomState {
+                    restore_frame,
+                    settling_observations_remaining: 4,
+                },
+            );
+            return Some(ClampOperation::ResizeToArea(custom_area));
+        }
+
+        if is_custom_zoomed {
+            if let Some(restore_frame) = last_regular {
+                if restore_frame != candidate.frame {
+                    eprintln!(
+                        "[dors-debug] managed zoom decide key={} transition=rehydrate restore_frame=({}, {}, {}, {})",
+                        key,
+                        restore_frame.x,
+                        restore_frame.y,
+                        restore_frame.width,
+                        restore_frame.height
+                    );
+                    self.states.insert(
+                        key.clone(),
+                        CustomZoomState {
+                            restore_frame,
+                            settling_observations_remaining: 4,
+                        },
+                    );
+                }
+            }
+            return None;
+        }
+
+        self.last_regular_frames
+            .insert(key.clone(), candidate.frame);
+        clamp_window_frame(candidate.frame, custom_area).map(ClampOperation::Restore)
+    }
 }
 
 pub fn should_clamp_candidate(candidate: &WindowCandidate, screen: ScreenFrame) -> bool {
@@ -97,12 +330,103 @@ pub fn clamp_windows_in_area(area: WorkingArea) -> Result<(), String> {
     Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
 }
 
+#[cfg(target_os = "macos")]
+pub fn clamp_windows_with_managed_zoom(
+    native_area: WorkingArea,
+    custom_area: WorkingArea,
+) -> Result<(), String> {
+    eprintln!(
+        "[dors-debug] clamp_windows_with_managed_zoom native=x={} y={} w={} h={} custom=x={} y={} w={} h={}",
+        native_area.x,
+        native_area.y,
+        native_area.width,
+        native_area.height,
+        custom_area.x,
+        custom_area.y,
+        custom_area.width,
+        custom_area.height
+    );
+    if let Err(error) = apply_managed_custom_zoom(native_area, custom_area) {
+        eprintln!("[dors-debug] managed zoom pass failed: {error}");
+    }
+    eprintln!("[dors-debug] fallback clamp pass running");
+    clamp_windows_in_area(custom_area)
+}
+
+#[cfg(target_os = "macos")]
+pub fn clamp_windows_for_pid_with_managed_zoom(
+    pid: i32,
+    native_area: WorkingArea,
+    custom_area: WorkingArea,
+) -> Result<(), String> {
+    eprintln!(
+        "[dors-debug] clamp_windows_for_pid_with_managed_zoom pid={} native=x={} y={} w={} h={} custom=x={} y={} w={} h={}",
+        pid,
+        native_area.x,
+        native_area.y,
+        native_area.width,
+        native_area.height,
+        custom_area.x,
+        custom_area.y,
+        custom_area.width,
+        custom_area.height
+    );
+    let windows = query_windows_for_pid(pid)?;
+    apply_managed_custom_zoom_to_windows(windows, native_area, custom_area)
+}
+
+#[cfg(target_os = "macos")]
+pub fn capture_regular_window_frames(
+    native_area: WorkingArea,
+    custom_area: WorkingArea,
+) -> Result<(), String> {
+    let windows = query_windows()?;
+    let tracker = custom_zoom_tracker();
+    let mut tracker = tracker
+        .lock()
+        .map_err(|_| "failed to lock zoom tracker".to_string())?;
+    let screen = ScreenFrame {
+        x: custom_area.x,
+        y: 0,
+        width: custom_area.width,
+        height: native_area.y + native_area.height,
+    };
+
+    for window in windows {
+        if should_clamp_candidate(&window.candidate, screen) {
+            tracker.observe_window_frame(&window.candidate, native_area, custom_area);
+        }
+    }
+
+    Ok(())
+}
+
 pub fn build_clamp_script_preview(area: WorkingArea) -> String {
     build_clamp_script(area)
 }
 
+pub fn build_query_windows_script_preview() -> String {
+    build_query_windows_script().to_string()
+}
+
+pub fn build_query_windows_for_pid_script_preview(pid: i32) -> String {
+    build_query_windows_for_pid_script(pid)
+}
+
+pub fn build_apply_operation_script_preview(
+    owner_name: &str,
+    window_index: usize,
+    target_frame: WindowFrame,
+) -> String {
+    build_apply_operation_script(
+        owner_name,
+        window_index,
+        target_frame,
+    )
+}
+
 #[cfg(target_os = "macos")]
-pub fn main_screen_allowed_work_area(dock_height: i32) -> Result<WorkingArea, String> {
+pub fn main_screen_work_areas(dock_height: i32) -> Result<(WorkingArea, WorkingArea), String> {
     use objc2_app_kit::NSScreen;
     use objc2_foundation::MainThreadMarker;
 
@@ -115,17 +439,297 @@ pub fn main_screen_allowed_work_area(dock_height: i32) -> Result<WorkingArea, St
     let bottom_reserved = (visible.origin.y - frame.origin.y).round() as i32;
     let total_reserved = (frame.size.height - visible.size.height).round() as i32;
     let top_reserved = (total_reserved - bottom_reserved).max(0);
+    let screen_frame = ScreenFrame {
+        x: 0,
+        y: 0,
+        width: frame.size.width.round() as i32,
+        height: frame.size.height.round() as i32,
+    };
 
-    Ok(build_allowed_work_area(
-        ScreenFrame {
-            x: 0,
-            y: 0,
-            width: frame.size.width.round() as i32,
-            height: frame.size.height.round() as i32,
-        },
-        top_reserved,
-        dock_height,
+    Ok((
+        build_allowed_work_area(screen_frame, top_reserved, 0),
+        build_allowed_work_area(screen_frame, top_reserved, dock_height),
     ))
+}
+
+#[cfg(target_os = "macos")]
+pub fn main_screen_allowed_work_area(dock_height: i32) -> Result<WorkingArea, String> {
+    let (_, custom_area) = main_screen_work_areas(dock_height)?;
+    Ok(custom_area)
+}
+
+#[cfg(target_os = "macos")]
+fn custom_zoom_tracker() -> &'static Mutex<CustomZoomTracker> {
+    static TRACKER: OnceLock<Mutex<CustomZoomTracker>> = OnceLock::new();
+    TRACKER.get_or_init(|| Mutex::new(CustomZoomTracker::default()))
+}
+
+#[cfg(target_os = "macos")]
+fn apply_managed_custom_zoom(native_area: WorkingArea, custom_area: WorkingArea) -> Result<(), String> {
+    let windows = query_windows()?;
+    apply_managed_custom_zoom_to_windows(windows, native_area, custom_area)
+}
+
+#[cfg(target_os = "macos")]
+fn apply_managed_custom_zoom_to_windows(
+    windows: Vec<ObservedWindow>,
+    native_area: WorkingArea,
+    custom_area: WorkingArea,
+) -> Result<(), String> {
+    eprintln!(
+        "[dors-debug] managed zoom observed_windows={}",
+        windows.len()
+    );
+    let tracker = custom_zoom_tracker();
+    let mut tracker = tracker.lock().map_err(|_| "failed to lock zoom tracker".to_string())?;
+    let screen = ScreenFrame {
+        x: custom_area.x,
+        y: 0,
+        width: custom_area.width,
+        height: native_area.y + native_area.height,
+    };
+
+    for window in windows {
+        eprintln!(
+            "[dors-debug] managed zoom inspect key={} owner={} title={:?} frame=({}, {}, {}, {})",
+            window.candidate.stable_key,
+            window.candidate.owner_name,
+            if window.title.is_empty() {
+                None::<&str>
+            } else {
+                Some(window.title.as_str())
+            },
+            window.candidate.frame.x,
+            window.candidate.frame.y,
+            window.candidate.frame.width,
+            window.candidate.frame.height
+        );
+        if !should_clamp_candidate(&window.candidate, screen) {
+            eprintln!(
+                "[dors-debug] managed zoom skip key={} reason=not-clamp-candidate",
+                window.candidate.stable_key
+            );
+            continue;
+        }
+
+        tracker.observe_window_frame(&window.candidate, native_area, custom_area);
+
+        let Some(operation) = tracker.plan_operation(&window.candidate, native_area, custom_area) else {
+            eprintln!(
+                "[dors-debug] managed zoom no-op key={} reason=no-planned-operation",
+                window.candidate.stable_key
+            );
+            continue;
+        };
+        eprintln!(
+            "[dors-debug] managed zoom apply key={} action={}",
+            window.candidate.stable_key,
+            describe_operation(operation)
+        );
+        apply_operation(&window, operation)?;
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn query_windows() -> Result<Vec<ObservedWindow>, String> {
+    let script = build_query_windows_script();
+    query_windows_with_script(script.to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn query_windows_for_pid(pid: i32) -> Result<Vec<ObservedWindow>, String> {
+    query_windows_with_script(build_query_windows_for_pid_script(pid))
+}
+
+#[cfg(target_os = "macos")]
+fn query_windows_with_script(script: String) -> Result<Vec<ObservedWindow>, String> {
+    let output = Command::new("osascript")
+        .args(["-e", &script])
+        .output()
+        .map_err(|error| error.to_string())?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+
+    Ok(parse_window_rows(&String::from_utf8_lossy(&output.stdout)))
+}
+
+#[cfg(target_os = "macos")]
+fn parse_window_rows(raw: &str) -> Vec<ObservedWindow> {
+    raw.lines()
+        .filter_map(|line| {
+            let mut parts = line.split('\t');
+            let owner_name = parts.next()?.trim().to_string();
+            let window_index: usize = parts.next()?.trim().parse().ok()?;
+            let title = normalize_ax_value(parts.next()?).to_string();
+            let document = normalize_ax_value(parts.next()?).to_string();
+            let is_standard = parts.next()?.trim().eq_ignore_ascii_case("true");
+            let is_fullscreen = parts.next()?.trim().eq_ignore_ascii_case("true");
+            let x = parts.next()?.trim().parse().ok()?;
+            let y = parts.next()?.trim().parse().ok()?;
+            let width = parts.next()?.trim().parse().ok()?;
+            let height = parts.next()?.trim().parse().ok()?;
+            let stable_key = if !document.is_empty() {
+                format!("{owner_name}::{document}")
+            } else {
+                format!("{owner_name}::window-{window_index}")
+            };
+
+            Some(ObservedWindow {
+                window_index,
+                title,
+                candidate: WindowCandidate {
+                    owner_name,
+                    stable_key,
+                    frame: WindowFrame { x, y, width, height },
+                    is_standard,
+                    is_resizable: true,
+                    is_fullscreen,
+                    is_visible: true,
+                },
+            })
+        })
+        .collect()
+}
+
+fn build_query_windows_script() -> &'static str {
+    "tell application \"System Events\"\n\
+set rowTexts to {}\n\
+set procNames to name of every application process whose background only is false and visible is true\n\
+repeat with procName in procNames\n\
+if procName as text is not \"dors\" then\n\
+set proc to application process (procName as text)\n\
+set winIndex to 0\n\
+repeat with win in windows of proc\n\
+set winIndex to winIndex + 1\n\
+try\n\
+set isStandard to true\n\
+try\n\
+set isStandard to (value of attribute \"AXSubrole\" of win is \"AXStandardWindow\")\n\
+end try\n\
+set isFullScreen to false\n\
+try\n\
+set isFullScreen to value of attribute \"AXFullScreen\" of win\n\
+end try\n\
+set {xPos, yPos} to position of win\n\
+set {winWidth, winHeight} to size of win\n\
+set windowTitle to \"\"\n\
+try\n\
+set windowTitle to name of win\n\
+end try\n\
+set windowDocument to \"\"\n\
+try\n\
+set windowDocument to value of attribute \"AXDocument\" of win\n\
+end try\n\
+copy ((procName as text) & tab & (winIndex as text) & tab & windowTitle & tab & windowDocument & tab & (isStandard as text) & tab & (isFullScreen as text) & tab & (xPos as text) & tab & (yPos as text) & tab & (winWidth as text) & tab & (winHeight as text)) to end of rowTexts\n\
+end try\n\
+end repeat\n\
+end if\n\
+end repeat\n\
+set AppleScript's text item delimiters to linefeed\n\
+return rowTexts as text\n\
+end tell"
+}
+
+fn build_query_windows_for_pid_script(pid: i32) -> String {
+    format!(
+        "tell application \"System Events\"\n\
+set rowTexts to {{}}\n\
+set proc to first application process whose unix id is {pid}\n\
+set procName to name of proc\n\
+set winIndex to 0\n\
+repeat with win in windows of proc\n\
+set winIndex to winIndex + 1\n\
+try\n\
+set isStandard to true\n\
+try\n\
+set isStandard to (value of attribute \"AXSubrole\" of win is \"AXStandardWindow\")\n\
+end try\n\
+set isFullScreen to false\n\
+try\n\
+set isFullScreen to value of attribute \"AXFullScreen\" of win\n\
+end try\n\
+set {{xPos, yPos}} to position of win\n\
+set {{winWidth, winHeight}} to size of win\n\
+set windowTitle to \"\"\n\
+try\n\
+set windowTitle to name of win\n\
+end try\n\
+set windowDocument to \"\"\n\
+try\n\
+set windowDocument to value of attribute \"AXDocument\" of win\n\
+end try\n\
+copy ((procName as text) & tab & (winIndex as text) & tab & windowTitle & tab & windowDocument & tab & (isStandard as text) & tab & (isFullScreen as text) & tab & (xPos as text) & tab & (yPos as text) & tab & (winWidth as text) & tab & (winHeight as text)) to end of rowTexts\n\
+end try\n\
+end repeat\n\
+set AppleScript's text item delimiters to linefeed\n\
+return rowTexts as text\n\
+end tell",
+        pid = pid
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn apply_operation(window: &ObservedWindow, operation: ClampOperation) -> Result<(), String> {
+    let target_frame = match operation {
+        ClampOperation::ResizeToArea(area) => WindowFrame {
+            x: area.x,
+            y: area.y,
+            width: area.width,
+            height: area.height,
+        },
+        ClampOperation::Restore(frame) => frame,
+    };
+    let script = build_apply_operation_script(
+        &window.candidate.owner_name,
+        window.window_index,
+        target_frame,
+    );
+    let output = Command::new("osascript")
+        .args(["-e", &script])
+        .output()
+        .map_err(|error| error.to_string())?;
+
+    if output.status.success() {
+        return Ok(());
+    }
+
+    Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn build_apply_operation_script(
+    owner_name: &str,
+    window_index: usize,
+    target_frame: WindowFrame,
+) -> String {
+    format!(
+        "tell application \"System Events\"\n\
+tell application process \"{owner}\"\n\
+try\n\
+set win to item {window_index} of windows\n\
+try\n\
+set size of win to {{{new_width}, {new_height}}}\n\
+set position of win to {{{new_x}, {new_y}}}\n\
+end try\n\
+end try\n\
+end tell\n\
+end tell",
+        owner = escape_applescript_string(owner_name),
+        window_index = window_index,
+        new_x = target_frame.x,
+        new_y = target_frame.y,
+        new_width = target_frame.width,
+        new_height = target_frame.height,
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn escape_applescript_string(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 #[cfg(target_os = "macos")]
